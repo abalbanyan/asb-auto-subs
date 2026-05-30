@@ -1,6 +1,6 @@
 {
   "name": "asb-auto-subs",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Automatically matches Jimaku subtitles for anime episodes, loads them into ASB Player, and supports per-series filters and opt-outs.",
   "main": "src/popup.js",
   "scripts": {

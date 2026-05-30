@@ -1,27 +1,42 @@
 # ASB Auto Subs
 
-A small chrome extension using the jimaku.cc API to automatically download japanese subtitles of the anime episode you are currently watching. Works on hianime.to, miruro.tv, and crunchyroll.com (can be extended on request)
-Intended to be used in combination with [ASB Player](https://github.com/killergerbah/asbplayer), another extension, to insert the subtitles into the video
+ASB Auto Subs automatically finds Japanese subtitle files from [Jimaku](https://jimaku.cc) for the anime episode you are watching. It downloads the selected subtitle file and loads supported subtitle formats directly into [ASB Player](https://github.com/killergerbah/asbplayer).
 
-https://github.com/user-attachments/assets/b4f83acc-35f7-41b3-b687-2baa42a84b26
+This version is forked from [GodPepe7/asb-auto-subs](https://github.com/GodPepe7/asb-auto-subs).
 
-# Instructions
+## Features
 
-To use the extension you have to do the following steps once:
-1. Add the extension to your browser
-  - Firefox: get it from the [addon store](https://addons.mozilla.org/en-US/firefox/addon/auto-subs-for-asb-player)
-  - Chrome:
-    - On [latest releases](https://github.com/GodPepe7/asb-auto-subs/releases) under "Assets" click on "asb-auto-subs-chrome.zip" to download the extension
-    - Unzip the downloaded file
-    - open "chrome://extensions/", click on "Load Unpacked" and select the unzipped extension
-2. Create a [Jimaku Account](https://jimaku.cc/login)  and generate your [API Key](https://jimaku.cc/account)
-3. In your searchbar at the top click on the puzzle icon and click on the extension and submit the key
-4. Go to any anime episode on hianimez, miruro, or crunchyroll and it should download the subtitles automatically
+- Detects the current anime series and episode on hianime, Miruro, and Crunchyroll.
+- Handles Crunchyroll episode changes without requiring a full page reload.
+- Resolves Crunchyroll seasons separately so later seasons use the correct Jimaku entry.
+- Downloads matching subtitle files from Jimaku automatically.
+- Loads supported subtitle files directly into ASB Player when available.
+- Supports saved per-series filename filters for choosing a preferred subtitle release.
+- Supports disabling downloads for a specific series.
+- Supports temporarily disabling the extension globally.
+- Deletes the previously downloaded subtitle file automatically by default.
 
-# Build locally
+## Setup
 
-Prerequisite: Node 20 LTS installed
+1. Install [ASB Player](https://github.com/killergerbah/asbplayer).
+2. Download and unzip this extension, or build it locally.
+3. Open `chrome://extensions/` in Chrome.
+4. Enable Developer mode.
+5. Click Load unpacked and select this project folder.
+6. Create a [Jimaku account](https://jimaku.cc/login) and generate an [API key](https://jimaku.cc/account).
+7. Open the pinned extension popup, enter the API key, and click Set.
+8. Open an anime episode on hianime, Miruro, or Crunchyroll.
 
-1. `npm install`
-2. `npm run build`
-3. Replace manifest.json content with either firefox-manifest.json or chrome-manifest.json depending on what browser is used
+The extension popup shows the currently detected series and episode. Use Saved filters to select a preferred subtitle filename pattern for a series.
+
+## Build Locally
+
+Prerequisite: Node 20 LTS.
+
+```powershell
+npm install
+npm run build
+Copy-Item .\chrome-manifest.json .\manifest.json -Force
+```
+
+After rebuilding, reload the unpacked extension from `chrome://extensions/`.
