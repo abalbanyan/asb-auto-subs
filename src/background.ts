@@ -1,14 +1,39 @@
 import { animeSites } from "./animeSites";
-import { AnimeMetaData, JimakuEntry, Subs, AnilistObject } from "./types";
+import {
+  AnimeMetaData,
+  JimakuEntry,
+  Subs,
+  AnilistObject,
+  SubtitlePatterns,
+} from "./types";
 
 const lastDownloadedKeyName = "lastDownloadedKey";
+const subtitlePatternsKeyName = "subtitlePatterns";
 let lastProcessedUrl = "";
 
-async function alreadyDownloaded(id: number, episode: number) {
-  const key = `${id}_${episode}`;
-  const result = await chrome.storage.local.get([key]);
-  if (Object.keys(result).length > 0) return true;
-  await chrome.storage.local.set({ [key]: true });
+function episodeKey(id: number, episode: number) {
+  return `${id}_${episode}`;
+}
+
+function selectedSubtitleKey(id: number, episode: number) {
+  return `${episodeKey(id, episode)}_selectedSubtitle`;
+}
+
+async function alreadyDownloaded(
+  id: number,
+  episode: number,
+  selectedSubtitleName: string,
+) {
+  const key = episodeKey(id, episode);
+  const selectedKey = selectedSubtitleKey(id, episode);
+  const result = await chrome.storage.local.get([key, selectedKey]);
+  if (
+    Object.keys(result).length > 0 &&
+    result[selectedKey] === selectedSubtitleName
+  ) {
+    return true;
+  }
+  await chrome.storage.local.set({ [key]: true, [selectedKey]: selectedSubtitleName });
   return false;
 }
 
@@ -31,6 +56,38 @@ function getAnimeSiteKey(url: string) {
 
 async function notifyError(tabId: number, error: string) {
   await chrome.tabs.sendMessage(tabId, { action: "notifyError", error });
+}
+
+async function notifySuccess(tabId: number, loadedIntoAsb: boolean) {
+  await chrome.tabs.sendMessage(tabId, {
+    action: loadedIntoAsb ? "notifyLoadedIntoAsb" : "notifySuccess",
+  });
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return btoa(binary);
+}
+
+async function loadSubsIntoAsb(tabId: number, url: string, name: string) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return false;
+    const base64 = arrayBufferToBase64(await response.arrayBuffer());
+    return <boolean>await chrome.tabs.sendMessage(tabId, {
+      action: "loadSubsIntoAsb",
+      name,
+      base64,
+    });
+  } catch {
+    return false;
+  }
 }
 
 async function fetchAnilistId(title: string) {
@@ -70,22 +127,62 @@ async function fetchAnilistId(title: string) {
   }
 }
 
-async function getAnilistIdAndEpisode(tabId: number, animeSiteKey: string) {
-  let anilistId, episode;
+async function getAnimeMetaData(tabId: number, animeSiteKey: string) {
   const animeMetaData: AnimeMetaData = await chrome.tabs.sendMessage(tabId, {
     action: "getAnimeMetaData",
     animeSiteKey,
   });
   console.table(animeMetaData);
-  if (!animeMetaData) return null;
-  episode = animeMetaData.episode;
-  anilistId = animeMetaData.anilistId;
+  return animeMetaData || null;
+}
+
+async function getCurrentAnimeMetaData() {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs[0];
+  if (!tab?.id || !tab.url) return null;
+
+  const animeSiteKey = getAnimeSiteKey(tab.url);
+  if (!animeSiteKey) return null;
+
+  await chrome.scripting.insertCSS({
+    target: { tabId: tab.id },
+    files: ["css/index.css"],
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["dist/injectScript.js"],
+  });
+
+  return await getAnimeMetaData(tab.id, animeSiteKey);
+}
+
+async function currentAnimeContext() {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs[0];
+  if (!tab?.id || !tab.url) return null;
+
+  const animeSiteKey = getAnimeSiteKey(tab.url);
+  if (!animeSiteKey) return null;
+
+  await chrome.scripting.insertCSS({
+    target: { tabId: tab.id },
+    files: ["css/index.css"],
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["dist/injectScript.js"],
+  });
+
+  const animeMetaData = await getAnimeMetaData(tab.id, animeSiteKey);
+  if (!animeMetaData?.title || !animeMetaData.episode) return null;
+
+  let anilistId = animeMetaData.anilistId;
   if (!anilistId) {
-    const id = await fetchAnilistId(animeMetaData.title);
-    if (!id) return "Failed fetching AnilistId";
-    anilistId = id;
+    anilistId = await fetchAnilistId(animeMetaData.title);
   }
-  return { anilistId, episode };
+  if (!anilistId) return null;
+
+  return { ...animeMetaData, tabId: tab.id, anilistId };
 }
 
 async function fetchSubs(anilistId: number, episode: number) {
@@ -167,10 +264,19 @@ async function markMultipleAsDownloaded(filename: string, anilistId: number) {
   }
 }
 
-async function downloadSubs(anilistId: number, episode: number) {
-  const subs = await fetchSubs(anilistId, episode);
-  if (typeof subs === "string") {
-    return subs;
+async function subtitlePatternForTitle(title: string) {
+  const result = await chrome.storage.sync.get(subtitlePatternsKeyName);
+  const patterns = <SubtitlePatterns>(result[subtitlePatternsKeyName] || {});
+  return patterns[title]?.trim();
+}
+
+function selectSubtitleFile(subs: Subs[], preferredPattern?: string) {
+  if (preferredPattern) {
+    const normalizedPattern = normalizeSubtitlePattern(preferredPattern);
+    const preferredSub = subs.find((sub) =>
+      normalizeSubtitlePattern(sub.name).includes(normalizedPattern),
+    );
+    if (preferredSub) return preferredSub;
   }
 
   const compressedFileEndings = [".zip", ".rar", ".7z"];
@@ -180,7 +286,48 @@ async function downloadSubs(anilistId: number, episode: number) {
     }
     return true;
   });
-  const { url, name } = nonCompressedSub ? nonCompressedSub : subs[0];
+  return nonCompressedSub ? nonCompressedSub : subs[0];
+}
+
+function normalizeSubtitlePattern(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+async function downloadSubs(
+  tabId: number,
+  title: string,
+  anilistId: number,
+  episode: number,
+) {
+  const subs = await fetchSubs(anilistId, episode);
+  if (typeof subs === "string") {
+    return { error: subs };
+  }
+
+  const compressedFileEndings = [".zip", ".rar", ".7z"];
+  const preferredPattern = await subtitlePatternForTitle(title);
+  const { url, name } = selectSubtitleFile(subs, preferredPattern);
+  const hasAlreadyBeenDownloaded = await alreadyDownloaded(
+    anilistId,
+    episode,
+    name,
+  );
+  if (hasAlreadyBeenDownloaded) {
+    return { alreadyDownloaded: true };
+  }
+
+  const shouldLoadIntoAsb = !compressedFileEndings.some((ending) =>
+    name.endsWith(ending),
+  );
+  let loadedIntoAsb = false;
+
+  if (shouldLoadIntoAsb) {
+    loadedIntoAsb = await loadSubsIntoAsb(tabId, url, name);
+  }
 
   chrome.downloads.download(
     {
@@ -195,21 +342,22 @@ async function downloadSubs(anilistId: number, episode: number) {
       if (name.endsWith(".zip") || name.endsWith(".rar")) {
         await markMultipleAsDownloaded(name, anilistId);
       } else {
-        const key = `${anilistId}_${episode}`;
+        const key = episodeKey(anilistId, episode);
         await chrome.storage.local.set({
           [lastDownloadedKeyName]: key,
           [key]: downloadId,
+          [selectedSubtitleKey(anilistId, episode)]: name,
         });
       }
     },
   );
-  return;
+  return { loadedIntoAsb };
 }
 
 async function removeLastDownloaded() {
-  const autoDelete = <boolean>(
-    (await chrome.storage.sync.get("autoDelete")).autoDelete
-  );
+  const storedAutoDelete = (await chrome.storage.sync.get("autoDelete"))
+    .autoDelete;
+  const autoDelete = storedAutoDelete ?? true;
   if (autoDelete)  {
     let lastDownloadedKey: string;
     lastDownloadedKey = (await chrome.storage.local.get(lastDownloadedKeyName))[lastDownloadedKeyName];
@@ -217,8 +365,16 @@ async function removeLastDownloaded() {
       if (Object.keys(result).length === 0) return;
       const downloadId = result[lastDownloadedKey];
       if (downloadId === true) return;
-      await chrome.downloads.removeFile(downloadId);
+      try {
+        await chrome.downloads.removeFile(downloadId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes("Download file already deleted")) {
+          throw error;
+        }
+      }
       await chrome.storage.local.remove(lastDownloadedKey);
+      await chrome.storage.local.remove(`${lastDownloadedKey}_selectedSubtitle`);
     });
   }
 }
@@ -249,27 +405,59 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
       return;
     }
 
-    const idAndEp = await getAnilistIdAndEpisode(details.tabId, animeSiteKey);
-    if (!idAndEp) return;
-    if (typeof idAndEp === "string") {
-      notifyError(details.tabId, idAndEp);
+    const animeMetaData = await getAnimeMetaData(details.tabId, animeSiteKey);
+    if (!animeMetaData) return;
+    let anilistId = animeMetaData.anilistId;
+    const { title, episode } = animeMetaData;
+    if (!episode || !title) {
+      notifyError(details.tabId, "Couldn't get anime data");
       return;
     }
-    const { anilistId, episode } = idAndEp;
-    console.log(`anilistId: ${anilistId}, episode: ${episode}`);
-    const hasAlreadyBeenDownloaded = await alreadyDownloaded(
-      anilistId,
-      episode,
-    );
-    if (hasAlreadyBeenDownloaded) {
+    if (!anilistId) {
+      const id = await fetchAnilistId(title);
+      if (!id) {
+        notifyError(details.tabId, "Failed fetching AnilistId");
+        return;
+      }
+      anilistId = id;
+    }
+    const result = await downloadSubs(details.tabId, title, anilistId, episode);
+    if (result.alreadyDownloaded) {
       chrome.tabs.sendMessage(details.tabId, {
         action: "alreadyDownloadedInfo",
       });
-      return;
-    }
-
-    const error = await downloadSubs(anilistId, episode);
-    if (error) notifyError(details.tabId, error);
-    else chrome.tabs.sendMessage(details.tabId, { action: "notifySuccess" });
+    } else if (result.error) notifyError(details.tabId, result.error);
+    else notifySuccess(details.tabId, !!result.loadedIntoAsb);
   });
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "getCurrentAnimeMetaData") {
+    getCurrentAnimeMetaData().then(sendResponse);
+    return true;
+  }
+
+  if (message.action === "refreshCurrentSubtitles") {
+    currentAnimeContext().then(async (context) => {
+      if (!context) {
+        sendResponse({ refreshed: false });
+        return;
+      }
+
+      const result = await downloadSubs(
+        context.tabId,
+        context.title,
+        context.anilistId,
+        context.episode,
+      );
+      sendResponse({
+        refreshed: !result.error && !result.alreadyDownloaded,
+        alreadyDownloaded: !!result.alreadyDownloaded,
+        error: result.error,
+      });
+    });
+    return true;
+  }
+
+  return;
 });

@@ -4,6 +4,10 @@ export type AnimeMetaData = {
   title: string;
 };
 
+export type SubtitlePatterns = {
+  [title: string]: string;
+};
+
 export type Subs = {
   url: string;
   name: string;

@@ -8,7 +8,7 @@
 
 <body>
   <form id="apiKeyForm">
-    <label for="apiKey">Jimaku API Key</label>
+    <label class="section-label" for="apiKey">Jimaku API Key</label>
     <input type="text" id="apiKey" name="apiKey" required>
     <div class="set-container">
       <button class="set-btn" type="submit">Set ↵</button>
@@ -16,12 +16,31 @@
     </div>
   </form>
   <section class="settings-container">
-    <h4>Settings</h4>
+    <h4 class="section-label">Settings</h4>
     <div class="settings-content">
       <input type="checkbox" name="autoDelete" id="autoDelete">
       <label for="autoDelete">Auto Deletion</label>
     </div>
   </section>
+  <section class="current-container">
+    <h4 class="section-label">Current Episode</h4>
+    <p id="currentAnime">No supported episode detected</p>
+  </section>
+  <form id="subtitlePatternForm" class="pattern-container">
+    <label class="section-label" for="savedSeries">Saved filters</label>
+    <select id="savedSeries" name="savedSeries">
+      <option value="">No saved series</option>
+    </select>
+    <p><strong>Editing:</strong> <span id="editingSeries">none</span></p>
+    <label for="subtitlePattern">Subtitle filename contains</label>
+    <input type="text" id="subtitlePattern" name="subtitlePattern">
+    <div class="pattern-actions">
+      <button class="set-btn" type="submit">Save</button>
+      <button class="set-btn" id="useCurrentSeries" type="button">Current</button>
+      <button class="set-btn" id="deletePattern" type="button">Delete</button>
+    </div>
+    <p id="patternInfo">Open a supported episode to configure this.</p>
+  </form>
   <script src="../dist/popup.js"></script>
 </body>
 
