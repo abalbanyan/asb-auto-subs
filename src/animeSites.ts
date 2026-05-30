@@ -128,9 +128,15 @@ class Crunchyroll implements AnimeSite {
 
   getTitle(): string | null {
     const episodeJsonLd = this.getEpisodeJsonLd();
+    const seriesTitle = normalizeText(episodeJsonLd?.partOfSeries?.name);
+    const seasonTitle = normalizeText(episodeJsonLd?.partOfSeason?.name);
+    const seasonNumber = Number(episodeJsonLd?.partOfSeason?.seasonNumber);
     const jsonLdTitle =
-      normalizeText(episodeJsonLd?.partOfSeries?.name) ||
-      normalizeText(episodeJsonLd?.partOfSeason?.name);
+      seasonTitle && seasonTitle !== seriesTitle
+        ? seasonTitle
+        : seriesTitle && seasonNumber > 1
+          ? `${seriesTitle} Season ${seasonNumber}`
+          : seriesTitle || seasonTitle;
     if (jsonLdTitle) return jsonLdTitle;
 
     const ogTitle = normalizeText(
