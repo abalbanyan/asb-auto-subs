@@ -21,10 +21,22 @@
       <input type="checkbox" name="autoDelete" id="autoDelete">
       <label for="autoDelete">Auto Deletion</label>
     </div>
+    <div class="settings-content">
+      <input type="checkbox" name="disableExtension" id="disableExtension">
+      <label for="disableExtension">Disable extension</label>
+    </div>
+  </section>
+  <section class="current-container">
+    <h4 class="section-label">Current Series</h4>
+    <p id="currentSeries">No supported series detected</p>
+    <div class="settings-content">
+      <input type="checkbox" name="disableSeries" id="disableSeries" disabled>
+      <label for="disableSeries">Disable series</label>
+    </div>
   </section>
   <section class="current-container">
     <h4 class="section-label">Current Episode</h4>
-    <p id="currentAnime">No supported episode detected</p>
+    <p id="currentEpisode">No supported episode detected</p>
   </section>
   <form id="subtitlePatternForm" class="pattern-container">
     <label class="section-label" for="savedSeries">Saved filters</label>

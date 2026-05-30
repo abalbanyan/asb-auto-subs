@@ -1,6 +1,7 @@
 import { animeSites } from "./animeSites";
 import {
   AnimeMetaData,
+  DisabledSeries,
   JimakuEntry,
   Subs,
   AnilistObject,
@@ -9,6 +10,8 @@ import {
 
 const lastDownloadedKeyName = "lastDownloadedKey";
 const subtitlePatternsKeyName = "subtitlePatterns";
+const disabledSeriesKeyName = "disabledSeries";
+const disabledKeyName = "disabled";
 let lastProcessedUrl = "";
 
 function episodeKey(id: number, episode: number) {
@@ -228,8 +231,8 @@ async function fetchSubs(anilistId: number, episode: number) {
         },
       },
     );
-    if (!searchResponse.ok) {
-      const error = jimakuErrors.get(searchResponse.status);
+    if (!filesResponse.ok) {
+      const error = jimakuErrors.get(filesResponse.status);
       return error ? error : "Something went wrong";
     }
     const subs: Subs[] = await filesResponse.json();
@@ -268,6 +271,16 @@ async function subtitlePatternForTitle(title: string) {
   const result = await chrome.storage.sync.get(subtitlePatternsKeyName);
   const patterns = <SubtitlePatterns>(result[subtitlePatternsKeyName] || {});
   return patterns[title]?.trim();
+}
+
+async function isSeriesDisabled(title: string) {
+  const result = await chrome.storage.sync.get(disabledSeriesKeyName);
+  const disabledSeries = <DisabledSeries>(result[disabledSeriesKeyName] || {});
+  return !!disabledSeries[title];
+}
+
+async function isExtensionDisabled() {
+  return !!(await chrome.storage.sync.get(disabledKeyName))[disabledKeyName];
 }
 
 function selectSubtitleFile(subs: Subs[], preferredPattern?: string) {
@@ -383,6 +396,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
   if (details.frameId !== 0) return;
   chrome.tabs.get(details.tabId, async (tab) => {
     if (tab.url !== details.url || lastProcessedUrl === details.url) return;
+    if (await isExtensionDisabled()) return;
     await removeLastDownloaded();
     lastProcessedUrl = tab.url;
     const animeSiteKey = getAnimeSiteKey(tab.url);
@@ -413,6 +427,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
       notifyError(details.tabId, "Couldn't get anime data");
       return;
     }
+    if (await isSeriesDisabled(title)) return;
     if (!anilistId) {
       const id = await fetchAnilistId(title);
       if (!id) {
@@ -421,6 +436,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
       }
       anilistId = id;
     }
+    if (await isExtensionDisabled() || await isSeriesDisabled(title)) return;
     const result = await downloadSubs(details.tabId, title, anilistId, episode);
     if (result.alreadyDownloaded) {
       chrome.tabs.sendMessage(details.tabId, {
@@ -438,8 +454,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "refreshCurrentSubtitles") {
-    currentAnimeContext().then(async (context) => {
-      if (!context) {
+    (async () => {
+      if (await isExtensionDisabled()) {
+        sendResponse({ refreshed: false });
+        return;
+      }
+      const context = await currentAnimeContext();
+      if (
+        !context ||
+        await isExtensionDisabled() ||
+        await isSeriesDisabled(context.title)
+      ) {
         sendResponse({ refreshed: false });
         return;
       }
@@ -455,7 +480,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         alreadyDownloaded: !!result.alreadyDownloaded,
         error: result.error,
       });
-    });
+    })();
     return true;
   }
 

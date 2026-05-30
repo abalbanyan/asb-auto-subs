@@ -1,6 +1,7 @@
-import { AnimeMetaData, SubtitlePatterns } from "./types";
+import { AnimeMetaData, DisabledSeries, SubtitlePatterns } from "./types";
 
 const subtitlePatternsKeyName = "subtitlePatterns";
+const disabledSeriesKeyName = "disabledSeries";
 let currentAnimeTitle: string | null = null;
 let editingSeriesTitle: string | null = null;
 
@@ -32,16 +33,43 @@ document
     await chrome.storage.sync.set({ autoDelete });
   });
 
+document
+  .getElementById("disableExtension")
+  ?.addEventListener("change", async function (event) {
+    const disabled = (event.target as HTMLInputElement).checked;
+    await chrome.storage.sync.set({ disabled });
+    if (!disabled) {
+      await refreshCurrentSubtitles();
+    }
+  });
+
 async function loadSettings() {
-  const storedAutoDelete = (await chrome.storage.sync.get("autoDelete"))
-    .autoDelete;
+  const settings = await chrome.storage.sync.get(["autoDelete", "disabled"]);
+  const storedAutoDelete = settings.autoDelete;
   const autoDelete = storedAutoDelete ?? true;
   const autoDeleteCheckbox = <HTMLInputElement>(
     document.getElementById("autoDelete")
   );
   autoDeleteCheckbox.checked = autoDelete;
+  (document.getElementById("disableExtension") as HTMLInputElement).checked =
+    !!settings.disabled;
 }
 loadSettings();
+
+document
+  .getElementById("disableSeries")
+  ?.addEventListener("change", async function (event) {
+    if (!currentAnimeTitle) return;
+
+    const disabled = (event.target as HTMLInputElement).checked;
+    const disabledSeries = await loadDisabledSeries();
+    if (disabled) {
+      disabledSeries[currentAnimeTitle] = true;
+    } else {
+      delete disabledSeries[currentAnimeTitle];
+    }
+    await chrome.storage.sync.set({ [disabledSeriesKeyName]: disabledSeries });
+  });
 
 document
   .getElementById("subtitlePatternForm")
@@ -118,6 +146,11 @@ async function loadSubtitlePatterns() {
   return <SubtitlePatterns>(result[subtitlePatternsKeyName] || {});
 }
 
+async function loadDisabledSeries() {
+  const result = await chrome.storage.sync.get(disabledSeriesKeyName);
+  return <DisabledSeries>(result[disabledSeriesKeyName] || {});
+}
+
 async function refreshCurrentSubtitles() {
   try {
     await chrome.runtime.sendMessage({ action: "refreshCurrentSubtitles" });
@@ -188,7 +221,8 @@ async function refreshSavedSeries(selectedTitle: string | null) {
 }
 
 async function loadCurrentAnime() {
-  const currentAnime = document.getElementById("currentAnime")!;
+  const currentSeries = document.getElementById("currentSeries")!;
+  const currentEpisode = document.getElementById("currentEpisode")!;
   setPatternControlsEnabled(false);
   await refreshSavedSeries(null);
 
@@ -201,7 +235,8 @@ async function loadCurrentAnime() {
     animeMetaData = null;
   }
   if (!animeMetaData) {
-    currentAnime.textContent = "No supported episode detected";
+    currentSeries.textContent = "No supported series detected";
+    currentEpisode.textContent = "No supported episode detected";
     const patterns = await loadSubtitlePatterns();
     const firstSavedSeries = Object.keys(patterns).sort((a, b) =>
       a.localeCompare(b),
@@ -216,7 +251,13 @@ async function loadCurrentAnime() {
   }
 
   currentAnimeTitle = animeMetaData.title;
-  currentAnime.textContent = `${animeMetaData.title} - Episode ${animeMetaData.episode}`;
+  currentSeries.textContent = animeMetaData.title;
+  currentEpisode.textContent = `Episode ${animeMetaData.episode}`;
+  const disableSeries = document.getElementById(
+    "disableSeries",
+  ) as HTMLInputElement;
+  disableSeries.disabled = false;
+  disableSeries.checked = !!(await loadDisabledSeries())[animeMetaData.title];
   const patterns = await loadSubtitlePatterns();
   setEditingSeries(animeMetaData.title, patterns);
   await refreshSavedSeries(animeMetaData.title);

@@ -8,6 +8,10 @@ export type SubtitlePatterns = {
   [title: string]: string;
 };
 
+export type DisabledSeries = {
+  [title: string]: boolean;
+};
+
 export type Subs = {
   url: string;
   name: string;
