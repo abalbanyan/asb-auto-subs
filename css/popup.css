@@ -11,9 +11,10 @@
   font-size: 12px;
   font-family: "inter";
   font-weight: 550;
-  color: #1C1B1F;
+  color: #e0e0e0;
   border-width: 1px;
-  background-color: #FBF9F9;
+  border-color: #4a6078;
+  background-color: #091624;
 }
 
 .set-container {
@@ -34,28 +35,28 @@ body {
   height: 50%;
   padding: 2px 5px;
   margin: 5px 0;
-  background-color: #EBE7F5;
+  background-color: #13283d;
 }
 
 .set-btn {
   width: 12ch;
-  background-color: #EBE7F5;
+  background-color: #1b344d;
 }
 
 .set-btn:hover {
-  background-color: #e0dcec;
+  background-color: #274866;
 }
 
 .key-info.set {
-  color: #16A713;
+  color: #73d673;
 }
 
 .key-info {
-  color: #ff9100;
+  color: #ffb454;
 }
 
 a {
-  color: blue
+  color: #7db8ff;
 }
 
 .section-label,
@@ -79,7 +80,8 @@ strong {
   gap: 4px;
 }
 
-#currentAnime,
+#currentSeries,
+#currentEpisode,
 #patternInfo,
 #editingSeries {
   margin-top: 6px;

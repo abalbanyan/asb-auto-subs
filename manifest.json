@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
   "name": "ASB Auto Subs",
-  "description": "An extension to automatically download the subtitle file of the currently played anime intended to be used with ASB Player to add the downloaded subtitles to the video.",
+  "description": "Automatically matches Jimaku subtitles for anime episodes, loads them into ASB Player, and supports per-series filters and opt-outs.",
   "version": "0.0.14",
   "background": {
     "service_worker": "dist/background.js"
+  },
+  "icons": {
+    "16": "imgs/logo16.png",
+    "32": "imgs/logo32.png",
+    "48": "imgs/logo48.png",
+    "128": "imgs/logo128.png"
   },
   "permissions": [
     "activeTab",
@@ -13,7 +19,18 @@
     "storage",
     "webNavigation"
   ],
-  "host_permissions": ["https://*/"],
+  "host_permissions": [
+    "https://hianime.to/*",
+    "https://hianimez.to/*",
+    "https://miruro.tv/*",
+    "https://miruro.online/*",
+    "https://miruro.to/*",
+    "https://crunchyroll.com/*",
+    "https://www.crunchyroll.com/*",
+    "https://jimaku.cc/*",
+    "https://www.jimaku.cc/*",
+    "https://graphql.anilist.co/*"
+  ],
   "action": {
     "default_popup": "html/popup.html",
     "default_icon": "imgs/logo.png"
