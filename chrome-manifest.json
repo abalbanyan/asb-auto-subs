@@ -24,8 +24,10 @@
       "matches": [
         "https://hianime.to/*",
         "https://miruro.tv/*",
-        "https://miruro.tv/*",
-        "https://miruro.tv/*"
+        "https://miruro.online/*",
+        "https://miruro.to/*",
+        "https://crunchyroll.com/*",
+        "https://www.crunchyroll.com/*"
       ]
     }
   ]

@@ -21,7 +21,14 @@
   "web_accessible_resources": [
     {
       "resources": ["css/index.css"],
-      "matches": ["https://hianime.to/*", "https://miruro.tv/*", "https://miruro.online/*", "https://miruro.to/*"]
+      "matches": [
+        "https://hianime.to/*",
+        "https://miruro.tv/*",
+        "https://miruro.online/*",
+        "https://miruro.to/*",
+        "https://crunchyroll.com/*",
+        "https://www.crunchyroll.com/*"
+      ]
     }
   ],
   "browser_specific_settings": {

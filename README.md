@@ -1,6 +1,6 @@
 # ASB Auto Subs
 
-A small chrome extension using the jimaku.cc API to automatically download japanese subtitles of the anime episode you are currently watching. Works on hianime.to and miruro.tv (can be extended on request)
+A small chrome extension using the jimaku.cc API to automatically download japanese subtitles of the anime episode you are currently watching. Works on hianime.to, miruro.tv, and crunchyroll.com (can be extended on request)
 Intended to be used in combination with [ASB Player](https://github.com/killergerbah/asbplayer), another extension, to insert the subtitles into the video
 
 https://github.com/user-attachments/assets/b4f83acc-35f7-41b3-b687-2baa42a84b26
@@ -16,7 +16,7 @@ To use the extension you have to do the following steps once:
     - open "chrome://extensions/", click on "Load Unpacked" and select the unzipped extension
 2. Create a [Jimaku Account](https://jimaku.cc/login)  and generate your [API Key](https://jimaku.cc/account)
 3. In your searchbar at the top click on the puzzle icon and click on the extension and submit the key
-4. Go to any anime episode on hianimez or miruro and it should download the subtitles automatically
+4. Go to any anime episode on hianimez, miruro, or crunchyroll and it should download the subtitles automatically
 
 # Build locally
 
