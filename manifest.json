@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ASB Auto Subs",
   "description": "Automatically matches Jimaku subtitles for anime episodes, loads them into ASB Player, and supports per-series filters and opt-outs.",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "background": {
     "service_worker": "dist/background.js"
   },
@@ -20,11 +20,6 @@
     "webNavigation"
   ],
   "host_permissions": [
-    "https://hianime.to/*",
-    "https://hianimez.to/*",
-    "https://miruro.tv/*",
-    "https://miruro.online/*",
-    "https://miruro.to/*",
     "https://crunchyroll.com/*",
     "https://www.crunchyroll.com/*",
     "https://jimaku.cc/*",
@@ -39,11 +34,6 @@
     {
       "resources": ["css/index.css"],
       "matches": [
-        "https://hianimez.to/*",
-        "https://hianime.to/*",
-        "https://miruro.tv/*",
-        "https://miruro.online/*",
-        "https://miruro.to/*",
         "https://crunchyroll.com/*",
         "https://www.crunchyroll.com/*"
       ]
