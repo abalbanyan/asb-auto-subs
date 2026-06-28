@@ -20,11 +20,6 @@
     "webNavigation"
   ],
   "host_permissions": [
-    "https://hianime.to/*",
-    "https://hianimez.to/*",
-    "https://miruro.tv/*",
-    "https://miruro.online/*",
-    "https://miruro.to/*",
     "https://crunchyroll.com/*",
     "https://www.crunchyroll.com/*",
     "https://jimaku.cc/*",
@@ -39,10 +34,6 @@
     {
       "resources": ["css/index.css"],
       "matches": [
-        "https://hianime.to/*",
-        "https://miruro.tv/*",
-        "https://miruro.online/*",
-        "https://miruro.to/*",
         "https://crunchyroll.com/*",
         "https://www.crunchyroll.com/*"
       ]

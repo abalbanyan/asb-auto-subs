@@ -6,7 +6,7 @@ This version is forked from [GodPepe7/asb-auto-subs](https://github.com/GodPepe7
 
 ## Features
 
-- Detects the current anime series and episode on hianime, Miruro, and Crunchyroll.
+- Detects the current anime series and episode on Crunchyroll.
 - Handles Crunchyroll episode changes without requiring a full page reload.
 - Resolves Crunchyroll seasons separately so later seasons use the correct Jimaku entry.
 - Downloads matching subtitle files from Jimaku automatically.
@@ -25,7 +25,7 @@ This version is forked from [GodPepe7/asb-auto-subs](https://github.com/GodPepe7
 5. Click Load unpacked and select this project folder.
 6. Create a [Jimaku account](https://jimaku.cc/login) and generate an [API key](https://jimaku.cc/account).
 7. Open the pinned extension popup, enter the API key, and click Set.
-8. Open an anime episode on hianime, Miruro, or Crunchyroll.
+8. Open an anime episode on Crunchyroll.
 
 The extension popup shows the currently detected series and episode. Use Saved filters to select a preferred subtitle filename pattern for a series.
 
