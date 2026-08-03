@@ -22,6 +22,38 @@ function parseEpisodeNumber(text: string | null | undefined) {
   return match ? parseInt(match[1]) : null;
 }
 
+function isGenericSeasonTitle(
+  seasonTitle: string | null,
+  seasonNumber: number,
+) {
+  const normalizedTitle = normalizeText(seasonTitle)?.toLowerCase();
+  if (!normalizedTitle) return false;
+  if (Number.isFinite(seasonNumber)) {
+    return normalizedTitle === `season ${seasonNumber}`;
+  }
+  return /^season \d+$/.test(normalizedTitle);
+}
+
+function titleFromEpisodeJsonLd(episodeJsonLd: JsonLdObject | undefined) {
+  const seriesTitle = normalizeText(episodeJsonLd?.partOfSeries?.name);
+  const seasonTitle = normalizeText(episodeJsonLd?.partOfSeason?.name);
+  const seasonNumber = Number(episodeJsonLd?.partOfSeason?.seasonNumber);
+
+  if (!seriesTitle) {
+    return isGenericSeasonTitle(seasonTitle, seasonNumber) ? null : seasonTitle;
+  }
+
+  if (
+    !seasonTitle ||
+    seasonTitle === seriesTitle ||
+    isGenericSeasonTitle(seasonTitle, seasonNumber)
+  ) {
+    return seasonNumber > 1 ? `${seriesTitle} Season ${seasonNumber}` : seriesTitle;
+  }
+
+  return seasonTitle;
+}
+
 function jsonLdObjects() {
   const objects: JsonLdObject[] = [];
   document
@@ -60,10 +92,23 @@ function jsonLdTypeMatches(object: JsonLdObject, type: string) {
 function urlMatchesCurrentPage(url: string | null | undefined) {
   if (!url) return false;
   try {
-    return new URL(url, window.location.origin).pathname === window.location.pathname;
+    const urlPathname = comparableCrunchyrollPathname(
+      new URL(url, window.location.origin).pathname,
+    );
+    const currentPathname = comparableCrunchyrollPathname(
+      window.location.pathname,
+    );
+    return urlPathname === currentPathname;
   } catch {
     return false;
   }
+}
+
+function comparableCrunchyrollPathname(pathname: string) {
+  return pathname.replace(
+    /^\/[a-z]{2}(?:-[a-z]{2})?(?=\/watch\/)/i,
+    "",
+  );
 }
 
 class Crunchyroll implements AnimeSite {
@@ -82,22 +127,16 @@ class Crunchyroll implements AnimeSite {
 
   getTitle(): string | null {
     const episodeJsonLd = this.getEpisodeJsonLd();
-    const seriesTitle = normalizeText(episodeJsonLd?.partOfSeries?.name);
-    const seasonTitle = normalizeText(episodeJsonLd?.partOfSeason?.name);
-    const seasonNumber = Number(episodeJsonLd?.partOfSeason?.seasonNumber);
-    const jsonLdTitle =
-      seasonTitle && seasonTitle !== seriesTitle
-        ? seasonTitle
-        : seriesTitle && seasonNumber > 1
-          ? `${seriesTitle} Season ${seasonNumber}`
-          : seriesTitle || seasonTitle;
+    const jsonLdTitle = titleFromEpisodeJsonLd(episodeJsonLd);
     if (jsonLdTitle) return jsonLdTitle;
 
     const ogTitle = normalizeText(
       this.getCurrentPageMeta("og:title")?.getAttribute("content"),
     );
     const titleFromMeta = normalizeText(ogTitle?.split("|")[0]);
-    if (titleFromMeta) return titleFromMeta;
+    if (titleFromMeta && !isGenericSeasonTitle(titleFromMeta, NaN)) {
+      return titleFromMeta;
+    }
 
     return normalizeText(
       document.querySelector('a[href*="/series/"] h4')?.textContent,

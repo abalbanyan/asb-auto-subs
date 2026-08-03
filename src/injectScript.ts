@@ -7,8 +7,8 @@ function sleep(ms: number) {
 }
 
 async function getAnimeMetaData(animeSite: AnimeSite) {
-  const retryDelayMs = 100;
-  const maxAttempts = 10;
+  const retryDelayMs = 250;
+  const maxAttempts = 40;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (animeSite.isMetaDataReady && !animeSite.isMetaDataReady()) {
