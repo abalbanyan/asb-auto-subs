@@ -69,6 +69,7 @@ strong {
 }
 
 .current-container,
+.jimaku-container,
 .pattern-container {
   margin-top: 14px;
 }
@@ -85,6 +86,15 @@ strong {
 #patternInfo,
 #editingSeries {
   margin-top: 6px;
+}
+
+#jimakuSubtitleLink {
+  margin-top: 6px;
+  display: inline-block;
+}
+
+#jimakuSubtitleLink[hidden] {
+  display: none;
 }
 
 .pattern-actions {

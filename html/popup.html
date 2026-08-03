@@ -25,14 +25,14 @@
       <input type="checkbox" name="disableExtension" id="disableExtension">
       <label for="disableExtension">Disable extension</label>
     </div>
+    <div class="settings-content">
+      <input type="checkbox" name="disableSeries" id="disableSeries" disabled>
+      <label for="disableSeries">Disable extension for this series</label>
+    </div>
   </section>
   <section class="current-container">
     <h4 class="section-label">Current Series</h4>
     <p id="currentSeries">No supported series detected</p>
-    <div class="settings-content">
-      <input type="checkbox" name="disableSeries" id="disableSeries" disabled>
-      <label for="disableSeries">Disable series</label>
-    </div>
   </section>
   <section class="current-container">
     <h4 class="section-label">Current Episode</h4>
@@ -53,6 +53,11 @@
     </div>
     <p id="patternInfo">Open a supported episode to configure this.</p>
   </form>
+  <section class="jimaku-container">
+    <a id="jimakuSubtitleLink" href="https://jimaku.cc" target="_blank" rel="noopener noreferrer" hidden>
+      Jimaku Link
+    </a>
+  </section>
   <script src="../dist/popup.js"></script>
 </body>
 

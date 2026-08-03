@@ -12,6 +12,17 @@ const lastDownloadedKeyName = "lastDownloadedKey";
 const subtitlePatternsKeyName = "subtitlePatterns";
 const disabledSeriesKeyName = "disabledSeries";
 const disabledKeyName = "disabled";
+const jimakuBaseUrl = "https://jimaku.cc";
+const jimakuApiBaseUrl = `${jimakuBaseUrl}/api`;
+const jimakuErrors = new Map([
+  [400, "Something went wrong! This shouldn't happen"],
+  [401, "Authentification failed. Check your API Key"],
+  [404, "Entry not found"],
+  [
+    429,
+    "You downloaded too many subtitles in a short amount of time. Try again in a short bit",
+  ],
+]);
 let lastProcessedUrl = "";
 
 function episodeKey(id: number, episode: number) {
@@ -136,6 +147,49 @@ async function fetchAnilistId(title: string) {
   }
 }
 
+async function getJimakuApiKey() {
+  const localStorageAPIKey = await chrome.storage.sync.get("apiKey");
+  return localStorageAPIKey["apiKey"];
+}
+
+function jimakuErrorForStatus(status: number) {
+  return jimakuErrors.get(status) || "Something went wrong";
+}
+
+async function fetchJimakuEntries(anilistId: number) {
+  const jimakuAPIKey = await getJimakuApiKey();
+
+  try {
+    const searchResponse = await fetch(
+      `${jimakuApiBaseUrl}/entries/search?anilist_id=${anilistId}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `${jimakuAPIKey}`,
+        },
+      },
+    );
+
+    if (!searchResponse.ok) {
+      return jimakuErrorForStatus(searchResponse.status);
+    }
+
+    return <JimakuEntry[]>await searchResponse.json();
+  } catch (e) {
+    if (typeof e === "string") {
+      e.toUpperCase();
+    } else if (e instanceof Error) {
+      console.error(e.message);
+    }
+    return "There was an error";
+  }
+}
+
+function jimakuEntryUrl(entryId: number) {
+  const url = new URL(`/entry/${entryId}`, jimakuBaseUrl);
+  return url.toString();
+}
+
 async function getAnimeMetaData(tabId: number, animeSiteKey: string) {
   const animeMetaData: AnimeMetaData = await chrome.tabs.sendMessage(tabId, {
     action: "getAnimeMetaData",
@@ -195,41 +249,19 @@ async function currentAnimeContext() {
 }
 
 async function fetchSubs(anilistId: number, episode: number) {
-  const localStorageAPIKey = await chrome.storage.sync.get("apiKey");
-  const jimakuAPIKey = localStorageAPIKey["apiKey"];
-  const BASE_URL = "https://jimaku.cc/api";
-  const jimakuErrors = new Map([
-    [400, "Something went wrong! This shouldn't happen"],
-    [401, "Authentification failed. Check your API Key"],
-    [404, "Entry not found"],
-    [
-      429,
-      "You downloaded too many subtitles in a short amount of time. Try again in a short bit",
-    ],
-  ]);
+  const jimakuAPIKey = await getJimakuApiKey();
 
   try {
-    const searchResponse = await fetch(
-      `${BASE_URL}/entries/search?anilist_id=${anilistId}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `${jimakuAPIKey}`,
-        },
-      },
-    );
-
-    if (!searchResponse.ok) {
-      const error = jimakuErrors.get(searchResponse.status);
-      return error ? error : "Something went wrong";
+    const jimakuEntry = await fetchJimakuEntries(anilistId);
+    if (typeof jimakuEntry === "string") {
+      return jimakuEntry;
     }
-    const jimakuEntry: JimakuEntry[] = await searchResponse.json();
     if (jimakuEntry.length === 0) {
       return `No subtitles found for this anime`;
     }
     const id = jimakuEntry[0].id;
     const filesResponse = await fetch(
-      BASE_URL + `/entries/${id}/files?episode=${episode}`,
+      jimakuApiBaseUrl + `/entries/${id}/files?episode=${episode}`,
       {
         method: "GET",
         headers: {
@@ -238,8 +270,7 @@ async function fetchSubs(anilistId: number, episode: number) {
       },
     );
     if (!filesResponse.ok) {
-      const error = jimakuErrors.get(filesResponse.status);
-      return error ? error : "Something went wrong";
+      return jimakuErrorForStatus(filesResponse.status);
     }
     const subs: Subs[] = await filesResponse.json();
     if (subs.length === 0) {
@@ -458,6 +489,39 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getCurrentAnimeMetaData") {
     getCurrentAnimeMetaData().then(sendResponse);
+    return true;
+  }
+
+  if (message.action === "getJimakuSubtitlesLink") {
+    (async () => {
+      const title = typeof message.title === "string" ? message.title : "";
+      let anilistId =
+        typeof message.anilistId === "number" &&
+        Number.isFinite(message.anilistId)
+          ? message.anilistId
+          : null;
+
+      if (!anilistId && !title) {
+        sendResponse(null);
+        return;
+      }
+
+      if (!anilistId) {
+        anilistId = (await fetchAnilistId(title)) || null;
+      }
+      if (!anilistId) {
+        sendResponse(null);
+        return;
+      }
+
+      const jimakuEntry = await fetchJimakuEntries(anilistId);
+      if (typeof jimakuEntry === "string" || jimakuEntry.length === 0) {
+        sendResponse(null);
+        return;
+      }
+
+      sendResponse({ url: jimakuEntryUrl(jimakuEntry[0].id) });
+    })();
     return true;
   }
 

@@ -1,5 +1,9 @@
 import { AnimeMetaData, DisabledSeries, SubtitlePatterns } from "./types";
 
+type JimakuSubtitlesLink = {
+  url: string;
+};
+
 const subtitlePatternsKeyName = "subtitlePatterns";
 const disabledSeriesKeyName = "disabledSeries";
 let currentAnimeTitle: string | null = null;
@@ -159,6 +163,38 @@ async function refreshCurrentSubtitles() {
   }
 }
 
+function setJimakuSubtitlesLink(url?: string) {
+  const link = document.getElementById("jimakuSubtitleLink") as HTMLAnchorElement;
+  link.hidden = !url;
+  if (url) {
+    link.href = url;
+  }
+}
+
+async function loadJimakuSubtitlesLink(animeMetaData: AnimeMetaData) {
+  setJimakuSubtitlesLink();
+
+  let jimakuLink: JimakuSubtitlesLink | null = null;
+  try {
+    jimakuLink = <JimakuSubtitlesLink | null>(
+      await chrome.runtime.sendMessage({
+        action: "getJimakuSubtitlesLink",
+        anilistId: animeMetaData.anilistId,
+        title: animeMetaData.title,
+      })
+    );
+  } catch {
+    jimakuLink = null;
+  }
+
+  if (!jimakuLink?.url) {
+    setJimakuSubtitlesLink();
+    return;
+  }
+
+  setJimakuSubtitlesLink(jimakuLink.url);
+}
+
 function setPatternInfo(text: string) {
   document.getElementById("patternInfo")!.textContent = text;
 }
@@ -237,6 +273,7 @@ async function loadCurrentAnime() {
   if (!animeMetaData) {
     currentSeries.textContent = "No supported series detected";
     currentEpisode.textContent = "No supported episode detected";
+    setJimakuSubtitlesLink();
     const patterns = await loadSubtitlePatterns();
     const firstSavedSeries = Object.keys(patterns).sort((a, b) =>
       a.localeCompare(b),
@@ -253,6 +290,7 @@ async function loadCurrentAnime() {
   currentAnimeTitle = animeMetaData.title;
   currentSeries.textContent = animeMetaData.title;
   currentEpisode.textContent = `Episode ${animeMetaData.episode}`;
+  await loadJimakuSubtitlesLink(animeMetaData);
   const disableSeries = document.getElementById(
     "disableSeries",
   ) as HTMLInputElement;
