@@ -118,14 +118,30 @@ function successMessage(
 }
 
 function createToast(msg: string, color: string) {
+  const toastContainer = getToastContainer();
   const toast = document.createElement("div");
   toast.className = "subs-toast";
   toast.textContent = msg;
   toast.style.backgroundColor = color;
   toast.className += " show";
-  document.body.append(toast);
+  toastContainer.append(toast);
   setTimeout(() => {
     toast.className = toast.className.replace("show", "");
     toast.remove();
+    if (!toastContainer.hasChildNodes()) {
+      toastContainer.remove();
+    }
   }, 3000);
+}
+
+function getToastContainer() {
+  const existingContainer = document.querySelector(".subs-toast-container");
+  if (existingContainer instanceof HTMLElement) {
+    return existingContainer;
+  }
+
+  const toastContainer = document.createElement("div");
+  toastContainer.className = "subs-toast-container";
+  document.body.append(toastContainer);
+  return toastContainer;
 }

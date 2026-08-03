@@ -1,16 +1,22 @@
+.subs-toast-container {
+  position: fixed;
+  z-index: 999;
+  left: 50%;
+  bottom: 100px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+
 .subs-toast {
   visibility: hidden;
   min-width: 250px;
-  margin-left: -125px;
   color: #f1ebeb;
   text-align: center;
   border-radius: 2px;
   padding: 16px;
-  position: fixed;
-  z-index: 999;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 100px;
 }
 
 .subs-toast.show {
@@ -21,48 +27,48 @@
 /* Animations to fade the snackbar in and out */
 @-webkit-keyframes fadein {
   from {
-    bottom: 50px;
+    transform: translateY(50px);
     opacity: 0;
   }
 
   to {
-    bottom: 100px;
+    transform: translateY(0);
     opacity: 1;
   }
 }
 
 @keyframes fadein {
   from {
-    bottom: 50px;
+    transform: translateY(50px);
     opacity: 0;
   }
 
   to {
-    bottom: 100px;
+    transform: translateY(0);
     opacity: 1;
   }
 }
 
 @-webkit-keyframes fadeout {
   from {
-    bottom: 100px;
+    transform: translateY(0);
     opacity: 1;
   }
 
   to {
-    bottom: 50px;
+    transform: translateY(50px);
     opacity: 0;
   }
 }
 
 @keyframes fadeout {
   from {
-    bottom: 100px;
+    transform: translateY(0);
     opacity: 1;
   }
 
   to {
-    bottom: 50px;
+    transform: translateY(50px);
     opacity: 0;
   }
 }
