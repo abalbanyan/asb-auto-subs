@@ -69,7 +69,7 @@ if (!globalWindow.asbAutoSubsInjected) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.action) {
       case "alreadyDownloadedInfo":
-        createToast("Subs already downloaded once", "#ff9318d3");
+        createToast("Subtitles already downloaded once", "#ff9318d3");
         break;
       case "getAnimeMetaData":
         const animeSite: AnimeSite = animeSites.get(message.animeSiteKey)!;
@@ -89,12 +89,32 @@ if (!globalWindow.asbAutoSubsInjected) {
         createToast(message.error, "#a51f07");
         break;
       case "notifyLoadedIntoAsb":
-        createToast("Successfully downloaded and loaded subs", "#0a9611");
+        createToast(
+          successMessage("Successfully downloaded and loaded subtitles", message),
+          "#0a9611",
+        );
         break;
       case "notifySuccess":
-        createToast("Successfully downloaded subs", "#0a9611");
+        createToast(
+          successMessage("Successfully downloaded subtitles", message),
+          "#0a9611",
+        );
     }
   });
+}
+
+function successMessage(
+  baseMessage: string,
+  message: { title?: unknown; episode?: unknown },
+) {
+  const title = typeof message.title === "string" ? message.title.trim() : "";
+  const episode =
+    typeof message.episode === "number" && Number.isFinite(message.episode)
+      ? message.episode
+      : null;
+
+  if (!title || episode === null) return baseMessage;
+  return `${baseMessage} for ${title} episode ${episode}`;
 }
 
 function createToast(msg: string, color: string) {

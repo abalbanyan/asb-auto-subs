@@ -61,9 +61,15 @@ async function notifyError(tabId: number, error: string) {
   await chrome.tabs.sendMessage(tabId, { action: "notifyError", error });
 }
 
-async function notifySuccess(tabId: number, loadedIntoAsb: boolean) {
+async function notifySuccess(
+  tabId: number,
+  loadedIntoAsb: boolean,
+  animeMetaData: Pick<AnimeMetaData, "title" | "episode">,
+) {
   await chrome.tabs.sendMessage(tabId, {
     action: loadedIntoAsb ? "notifyLoadedIntoAsb" : "notifySuccess",
+    title: animeMetaData.title,
+    episode: animeMetaData.episode,
   });
 }
 
@@ -198,7 +204,7 @@ async function fetchSubs(anilistId: number, episode: number) {
     [404, "Entry not found"],
     [
       429,
-      "You downloaded too many subs in a short amount of time. Try again in a short bit",
+      "You downloaded too many subtitles in a short amount of time. Try again in a short bit",
     ],
   ]);
 
@@ -219,7 +225,7 @@ async function fetchSubs(anilistId: number, episode: number) {
     }
     const jimakuEntry: JimakuEntry[] = await searchResponse.json();
     if (jimakuEntry.length === 0) {
-      return `No subs found for this anime`;
+      return `No subtitles found for this anime`;
     }
     const id = jimakuEntry[0].id;
     const filesResponse = await fetch(
@@ -237,7 +243,7 @@ async function fetchSubs(anilistId: number, episode: number) {
     }
     const subs: Subs[] = await filesResponse.json();
     if (subs.length === 0) {
-      return `No subs for episode ${episode} could be found`;
+      return `No subtitles for episode ${episode} could be found`;
     }
     return subs;
   } catch (e) {
@@ -443,7 +449,9 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
         action: "alreadyDownloadedInfo",
       });
     } else if (result.error) notifyError(details.tabId, result.error);
-    else notifySuccess(details.tabId, !!result.loadedIntoAsb);
+    else {
+      notifySuccess(details.tabId, !!result.loadedIntoAsb, { title, episode });
+    }
   });
 });
 
