@@ -4,8 +4,11 @@ const globalWindow = window as typeof window & { asbAutoSubsInjected?: boolean }
 
 type ToastOptions = {
   persistent?: boolean;
+  dismissOnApiKeySet?: boolean;
   onClick?: () => void;
 };
+
+const missingApiKeyToastClassName = "subs-toast-missing-api-key";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -96,6 +99,7 @@ if (!globalWindow.asbAutoSubsInjected) {
       case "notifyMissingJimakuApiKey":
         createToast(message.message, "#a51f07", {
           persistent: true,
+          dismissOnApiKeySet: true,
           onClick: () => {
             chrome.runtime.sendMessage({ action: "openExtensionPopup" });
           },
@@ -114,6 +118,16 @@ if (!globalWindow.asbAutoSubsInjected) {
         );
     }
   });
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "sync") return;
+    if (!hasJimakuApiKey(changes.apiKey?.newValue)) return;
+    removeMissingApiKeyToasts();
+  });
+}
+
+function hasJimakuApiKey(apiKey: unknown) {
+  return typeof apiKey === "string" && apiKey.trim().length > 0;
 }
 
 function successMessage(
@@ -140,6 +154,9 @@ function createToast(msg: string, color: string, options: ToastOptions = {}) {
   if (options.onClick) {
     toast.classList.add("clickable");
     toast.addEventListener("click", options.onClick);
+  }
+  if (options.dismissOnApiKeySet) {
+    toast.classList.add(missingApiKeyToastClassName);
   }
   toast.style.backgroundColor = color;
 
@@ -169,10 +186,16 @@ function createToast(msg: string, color: string, options: ToastOptions = {}) {
   }, 3000);
 }
 
-function removeToast(toast: HTMLElement, toastContainer: HTMLElement) {
+function removeMissingApiKeyToasts() {
+  document
+    .querySelectorAll<HTMLElement>(`.${missingApiKeyToastClassName}`)
+    .forEach((toast) => removeToast(toast));
+}
+
+function removeToast(toast: HTMLElement, toastContainer = toast.parentElement) {
   toast.classList.remove("show");
   toast.remove();
-  if (!toastContainer.hasChildNodes()) {
+  if (toastContainer && !toastContainer.hasChildNodes()) {
     toastContainer.remove();
   }
 }
