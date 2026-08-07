@@ -2,6 +2,11 @@ import { AnimeSite, animeSites } from "./animeSites";
 
 const globalWindow = window as typeof window & { asbAutoSubsInjected?: boolean };
 
+type ToastOptions = {
+  persistent?: boolean;
+  onClick?: () => void;
+};
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -88,6 +93,14 @@ if (!globalWindow.asbAutoSubsInjected) {
       case "notifyError":
         createToast(message.error, "#a51f07");
         break;
+      case "notifyMissingJimakuApiKey":
+        createToast(message.message, "#a51f07", {
+          persistent: true,
+          onClick: () => {
+            chrome.runtime.sendMessage({ action: "openExtensionPopup" });
+          },
+        });
+        break;
       case "notifyLoadedIntoAsb":
         createToast(
           successMessage("Successfully downloaded and loaded subtitles", message),
@@ -117,21 +130,51 @@ function successMessage(
   return `${baseMessage} for ${title} episode ${episode}`;
 }
 
-function createToast(msg: string, color: string) {
+function createToast(msg: string, color: string, options: ToastOptions = {}) {
   const toastContainer = getToastContainer();
   const toast = document.createElement("div");
   toast.className = "subs-toast";
-  toast.textContent = msg;
+  if (!options.persistent) {
+    toast.classList.add("transient");
+  }
+  if (options.onClick) {
+    toast.classList.add("clickable");
+    toast.addEventListener("click", options.onClick);
+  }
   toast.style.backgroundColor = color;
-  toast.className += " show";
+
+  const message = document.createElement("span");
+  message.textContent = msg;
+  toast.append(message);
+
+  if (options.persistent) {
+    const dismissButton = document.createElement("button");
+    dismissButton.type = "button";
+    dismissButton.className = "subs-toast-dismiss";
+    dismissButton.setAttribute("aria-label", "Dismiss notification");
+    dismissButton.textContent = "x";
+    dismissButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeToast(toast, toastContainer);
+    });
+    toast.append(dismissButton);
+  }
+
+  toast.classList.add("show");
   toastContainer.append(toast);
+  if (options.persistent) return;
+
   setTimeout(() => {
-    toast.className = toast.className.replace("show", "");
-    toast.remove();
-    if (!toastContainer.hasChildNodes()) {
-      toastContainer.remove();
-    }
+    removeToast(toast, toastContainer);
   }, 3000);
+}
+
+function removeToast(toast: HTMLElement, toastContainer: HTMLElement) {
+  toast.classList.remove("show");
+  toast.remove();
+  if (!toastContainer.hasChildNodes()) {
+    toastContainer.remove();
+  }
 }
 
 function getToastContainer() {

@@ -6,6 +6,7 @@ type JimakuSubtitlesLink = {
 
 const subtitlePatternsKeyName = "subtitlePatterns";
 const disabledSeriesKeyName = "disabledSeries";
+const apiKeyAttentionFlagName = "highlightApiKeyOnNextSettingsOpen";
 let currentAnimeTitle: string | null = null;
 let editingSeriesTitle: string | null = null;
 
@@ -14,21 +15,80 @@ document
   ?.addEventListener("submit", async function (event) {
     event.preventDefault();
     const inputAPIKey = (document.getElementById("apiKey") as HTMLInputElement)
-      .value;
+      .value
+      .trim();
     await chrome.storage.sync.set({ apiKey: inputAPIKey });
-    setApiKeyInfo();
+    if (hasJimakuApiKey(inputAPIKey)) {
+      await chrome.storage.local.remove(apiKeyAttentionFlagName);
+    }
+    await setApiKeyInfo();
   });
+
+function hasJimakuApiKey(apiKey: unknown) {
+  return typeof apiKey === "string" && apiKey.trim().length > 0;
+}
+
+function setMissingApiKeyInfo(messageBeforeLink: string, messageAfterLink = "") {
+  const keyInfo = document.querySelector(".key-info")!;
+  keyInfo.textContent = "";
+  keyInfo.append(`${messageBeforeLink} `);
+
+  const link = document.createElement("a");
+  link.href = "https://jimaku.cc/account";
+  link.textContent = "jimaku";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  keyInfo.append(link);
+  keyInfo.append(messageAfterLink);
+}
+
+function setApiKeyAttention(enabled: boolean) {
+  const form = document.getElementById("apiKeyForm")!;
+  const input = document.getElementById("apiKey") as HTMLInputElement;
+  form.classList.toggle("api-key-attention", enabled);
+  input.classList.toggle("api-key-attention-field", enabled);
+  if (enabled) {
+    input.focus();
+  }
+}
+
+async function consumeApiKeyAttentionRequest() {
+  const fromUrl =
+    new URLSearchParams(window.location.search).get("highlightApiKey") === "1";
+  const result = await chrome.storage.local.get(apiKeyAttentionFlagName);
+  if (result[apiKeyAttentionFlagName]) {
+    await chrome.storage.local.remove(apiKeyAttentionFlagName);
+  }
+  return fromUrl || !!result[apiKeyAttentionFlagName];
+}
 
 async function setApiKeyInfo() {
   const storageItem = await chrome.storage.sync.get("apiKey");
-  if (Object.keys(storageItem).length === 0) return;
-  (document.getElementById("apiKey") as HTMLInputElement)!.value =
-    storageItem["apiKey"];
+  const apiKey = storageItem["apiKey"];
+  const apiKeyInput = document.getElementById("apiKey") as HTMLInputElement;
+  apiKeyInput.value = typeof apiKey === "string" ? apiKey : "";
   const keyInfo = document.querySelector(".key-info");
+  if (!hasJimakuApiKey(apiKey)) {
+    setMissingApiKeyInfo(
+      "A Jimaku API key is required for this extension. Get one on",
+      " then add it here.",
+    );
+    keyInfo!.classList.remove("set");
+    setApiKeyAttention(true);
+    return;
+  }
+
+  apiKeyInput.value = apiKey.trim();
   keyInfo!.textContent = "API Key set!";
   keyInfo!.classList.add("set");
+  setApiKeyAttention(false);
 }
-setApiKeyInfo();
+
+async function initializeApiKeyForm() {
+  await consumeApiKeyAttentionRequest();
+  await setApiKeyInfo();
+}
+initializeApiKeyForm();
 
 document
   .getElementById("autoDelete")

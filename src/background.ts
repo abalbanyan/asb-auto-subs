@@ -12,6 +12,7 @@ const lastDownloadedKeyName = "lastDownloadedKey";
 const subtitlePatternsKeyName = "subtitlePatterns";
 const disabledSeriesKeyName = "disabledSeries";
 const disabledKeyName = "disabled";
+const apiKeyAttentionFlagName = "highlightApiKeyOnNextSettingsOpen";
 const jimakuBaseUrl = "https://jimaku.cc";
 const jimakuApiBaseUrl = `${jimakuBaseUrl}/api`;
 const jimakuErrors = new Map([
@@ -24,6 +25,7 @@ const jimakuErrors = new Map([
   ],
 ]);
 let lastProcessedUrl = "";
+let lastMissingApiKeyPromptUrl = "";
 
 function episodeKey(id: number, episode: number) {
   return `${id}_${episode}`;
@@ -70,6 +72,13 @@ function getAnimeSiteKey(url: string) {
 
 async function notifyError(tabId: number, error: string) {
   await chrome.tabs.sendMessage(tabId, { action: "notifyError", error });
+}
+
+async function notifyMissingJimakuApiKey(tabId: number) {
+  await chrome.tabs.sendMessage(tabId, {
+    action: "notifyMissingJimakuApiKey",
+    message: "A Jimaku API key is required to download subtitles. Click here to set your key.",
+  });
 }
 
 async function notifySuccess(
@@ -150,6 +159,40 @@ async function fetchAnilistId(title: string) {
 async function getJimakuApiKey() {
   const localStorageAPIKey = await chrome.storage.sync.get("apiKey");
   return localStorageAPIKey["apiKey"];
+}
+
+function hasJimakuApiKey(apiKey: unknown) {
+  return typeof apiKey === "string" && apiKey.trim().length > 0;
+}
+
+async function hasStoredJimakuApiKey() {
+  const { apiKey } = await chrome.storage.sync.get("apiKey");
+  return hasJimakuApiKey(apiKey);
+}
+
+async function openExtensionPopup(highlightApiKey = false) {
+  if (highlightApiKey) {
+    await chrome.storage.local.set({ [apiKeyAttentionFlagName]: true });
+  }
+
+  try {
+    await chrome.action.openPopup();
+  } catch {
+    return;
+  }
+}
+
+async function promptForMissingJimakuApiKey(
+  tabId: number,
+  url: string,
+  showTabNotification = true,
+) {
+  if (lastMissingApiKeyPromptUrl !== url) {
+    lastMissingApiKeyPromptUrl = url;
+    await openExtensionPopup(true);
+  }
+  if (!showTabNotification) return;
+  await notifyMissingJimakuApiKey(tabId);
 }
 
 function jimakuErrorForStatus(status: number) {
@@ -429,6 +472,23 @@ async function removeLastDownloaded() {
   }
 }
 
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== "install") return;
+  openExtensionPopup().catch((error) => {
+    console.error("Failed to open extension popup on install", error);
+  });
+});
+
+chrome.webNavigation.onCompleted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  chrome.tabs.get(details.tabId, async (tab) => {
+    if (!tab.url || !getAnimeSiteKey(tab.url)) return;
+    if (await isExtensionDisabled()) return;
+    if (await hasStoredJimakuApiKey()) return;
+    await promptForMissingJimakuApiKey(details.tabId, tab.url, false);
+  });
+});
+
 chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
   if (details.frameId !== 0) return;
   chrome.tabs.get(details.tabId, async (tab) => {
@@ -447,12 +507,8 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
       files: ["dist/injectScript.js"],
     });
 
-    const apiKey = await chrome.storage.sync.get("apiKey");
-    if (Object.keys(apiKey).length === 0) {
-      notifyError(
-        details.tabId,
-        "Please get your jimaku API Key from https://jimaku.cc/ and set it by clicking the extension icon",
-      );
+    if (!(await hasStoredJimakuApiKey())) {
+      await promptForMissingJimakuApiKey(details.tabId, tab.url);
       return;
     }
 
@@ -522,6 +578,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       sendResponse({ url: jimakuEntryUrl(jimakuEntry[0].id) });
     })();
+    return true;
+  }
+
+  if (message.action === "openExtensionPopup") {
+    openExtensionPopup(true).then(sendResponse);
     return true;
   }
 

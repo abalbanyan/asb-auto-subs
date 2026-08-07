@@ -55,6 +55,22 @@ body {
   color: #ffb454;
 }
 
+#apiKeyForm.api-key-attention {
+  padding: 10px;
+  border: 1px solid #ffb454;
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px rgba(255, 180, 84, 0.18);
+}
+
+#apiKeyForm.api-key-attention .section-label {
+  color: #ffd28a;
+}
+
+#apiKey.api-key-attention-field {
+  border-color: #ffb454;
+  outline: 2px solid rgba(255, 180, 84, 0.45);
+}
+
 a {
   color: #7db8ff;
 }
@@ -79,6 +95,11 @@ strong {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+#currentSeries,
+#currentEpisode {
+  color: #ffb454;
 }
 
 #currentSeries,

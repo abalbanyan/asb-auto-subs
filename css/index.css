@@ -17,11 +17,37 @@
   text-align: center;
   border-radius: 2px;
   padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.subs-toast.clickable {
+  cursor: pointer;
 }
 
 .subs-toast.show {
   visibility: visible;
+  animation: fadein 0.5s;
+}
+
+.subs-toast.transient.show {
   animation: fadein 0.5s, fadeout 0.5s 2.5s;
+}
+
+.subs-toast-dismiss {
+  appearance: none;
+  border: 0;
+  margin: -8px -8px -8px 0;
+  padding: 4px 7px;
+  color: #f1ebeb;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.subs-toast-dismiss:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 /* Animations to fade the snackbar in and out */
