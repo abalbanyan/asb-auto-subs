@@ -147,6 +147,27 @@ strong {
   margin: 6px 0 8px;
 }
 
+.source-suggestion-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 8px;
+  color: #ffb454;
+}
+
+.source-suggestion-loading[hidden] {
+  display: none;
+}
+
+.source-suggestion-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #4a6078;
+  border-top-color: #ffb454;
+  border-radius: 50%;
+  animation: source-suggestion-spin 0.8s linear infinite;
+}
+
 .source-suggestion {
   width: auto;
   max-width: 100%;
@@ -165,4 +186,10 @@ strong {
 .source-suggestion.active {
   border-color: #ffb454;
   color: #ffcf88;
+}
+
+@keyframes source-suggestion-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

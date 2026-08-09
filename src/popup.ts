@@ -28,6 +28,7 @@ let currentAnimeTitle: string | null = null;
 let currentAnimeMetaData: AnimeMetaData | null = null;
 let editingSeriesTitle: string | null = null;
 let editingSeriesSavedPattern = "";
+let sourceSuggestionRequestId = 0;
 
 document
   .getElementById("apiKeyForm")
@@ -438,7 +439,9 @@ function renderSubtitleSourceSuggestions(
   activePattern: string,
 ) {
   const container = document.getElementById("sourceSuggestions")!;
+  const loading = document.getElementById("sourceSuggestionLoading")!;
   const list = document.getElementById("sourceSuggestionList")!;
+  loading.hidden = true;
   list.textContent = "";
 
   if (suggestions.length === 0) {
@@ -469,7 +472,17 @@ function renderSubtitleSourceSuggestions(
   setActiveSourceSuggestion(activePattern);
 }
 
+function setSubtitleSourceSuggestionsLoading() {
+  const container = document.getElementById("sourceSuggestions")!;
+  const loading = document.getElementById("sourceSuggestionLoading")!;
+  const list = document.getElementById("sourceSuggestionList")!;
+  list.textContent = "";
+  container.hidden = false;
+  loading.hidden = false;
+}
+
 function clearSubtitleSourceSuggestions() {
+  sourceSuggestionRequestId += 1;
   renderSubtitleSourceSuggestions([], "");
 }
 
@@ -478,7 +491,9 @@ async function loadSubtitleSourceSuggestions(
   anilistId?: number,
   fallbackEpisode?: number,
 ) {
-  clearSubtitleSourceSuggestions();
+  const requestId = sourceSuggestionRequestId + 1;
+  sourceSuggestionRequestId = requestId;
+  setSubtitleSourceSuggestionsLoading();
 
   try {
     const result = <SeriesSubtitles>(
@@ -489,12 +504,15 @@ async function loadSubtitleSourceSuggestions(
         episode: fallbackEpisode,
       })
     );
+    if (requestId !== sourceSuggestionRequestId) return;
     renderSubtitleSourceSuggestions(
       subtitleSourceSuggestions(result.subs || []),
       (document.getElementById("subtitlePattern") as HTMLInputElement).value,
     );
   } catch {
-    clearSubtitleSourceSuggestions();
+    if (requestId === sourceSuggestionRequestId) {
+      renderSubtitleSourceSuggestions([], "");
+    }
   }
 }
 
