@@ -638,16 +638,18 @@ async function loadCurrentAnime() {
   currentAnimeMetaData = animeMetaData;
   currentSeries.textContent = animeMetaData.title;
   currentEpisode.textContent = `Episode ${animeMetaData.episode}`;
-  await loadJimakuSubtitlesLink(animeMetaData);
+  loadJimakuSubtitlesLink(animeMetaData);
+  const patterns = await loadSubtitlePatterns();
+  setEditingSeries(animeMetaData.title, patterns);
+  await refreshSavedSeries(animeMetaData.title);
+  const sourceSuggestionsPromise =
+    refreshSubtitleSourceSuggestionsForEditingSeries();
   const disableSeries = document.getElementById(
     "disableSeries",
   ) as HTMLInputElement;
   disableSeries.disabled = false;
   disableSeries.checked = !!(await loadDisabledSeries())[animeMetaData.title];
-  const patterns = await loadSubtitlePatterns();
-  setEditingSeries(animeMetaData.title, patterns);
-  await refreshSavedSeries(animeMetaData.title);
-  await refreshSubtitleSourceSuggestionsForEditingSeries();
+  await sourceSuggestionsPromise;
 }
 
 loadCurrentAnime();
