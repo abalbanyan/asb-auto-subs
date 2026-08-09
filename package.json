@@ -1,6 +1,6 @@
 {
   "name": "asb-auto-subs",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "Automatically matches Jimaku subtitles for anime episodes on Crunchyroll and loads them into asbplayer.",
   "main": "src/popup.js",
   "scripts": {
