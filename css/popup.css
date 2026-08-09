@@ -25,7 +25,7 @@
 
 body {
   padding: 18px 16px;
-  width: 275px;
+  width: 413px;
 }
 
 #apiKey,
@@ -90,6 +90,13 @@ strong {
   margin-top: 14px;
 }
 
+.section-divider {
+  height: 1px;
+  margin: 0 0 12px;
+  border: 0;
+  background-color: #ffb454;
+}
+
 .settings-content {
   margin-top: 8px;
   display: flex;
@@ -105,8 +112,13 @@ strong {
 #currentSeries,
 #currentEpisode,
 #patternInfo,
-#editingSeries {
+.source-suggestions {
   margin-top: 6px;
+}
+
+.subtitle-pattern-label {
+  display: block;
+  margin-top: 10px;
 }
 
 #jimakuSubtitleLink {
@@ -126,4 +138,31 @@ strong {
 .pattern-actions .set-btn {
   width: auto;
   min-width: 7ch;
+}
+
+.source-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+.source-suggestion {
+  width: auto;
+  max-width: 100%;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border-color: #5f7894;
+  background-color: #13283d;
+  color: #e8f1ff;
+  text-align: left;
+}
+
+.source-suggestion:hover {
+  background-color: #274866;
+}
+
+.source-suggestion.active {
+  border-color: #ffb454;
+  color: #ffcf88;
 }

@@ -31,6 +31,7 @@
     </div>
   </section>
   <section class="current-container">
+    <hr class="section-divider">
     <h4 class="section-label">Current Series</h4>
     <p id="currentSeries">No supported series detected</p>
   </section>
@@ -39,16 +40,19 @@
     <p id="currentEpisode">No supported episode detected</p>
   </section>
   <form id="subtitlePatternForm" class="pattern-container">
-    <label class="section-label" for="savedSeries">Saved filters</label>
+    <hr class="section-divider">
+    <label class="section-label" for="savedSeries">Saved subtitle filters</label>
     <select id="savedSeries" name="savedSeries">
       <option value="">No saved series</option>
     </select>
-    <p><strong>Editing:</strong> <span id="editingSeries">none</span></p>
-    <label for="subtitlePattern">Subtitle filename contains</label>
+    <div id="sourceSuggestions" class="source-suggestions" hidden>
+      <label class="section-label">Suggested subtitle sources</label>
+      <div id="sourceSuggestionList" class="source-suggestion-list"></div>
+    </div>
+    <label class="subtitle-pattern-label" for="subtitlePattern">Subtitle filename contains</label>
     <input type="text" id="subtitlePattern" name="subtitlePattern">
     <div class="pattern-actions">
       <button class="set-btn" type="submit">Save</button>
-      <button class="set-btn" id="useCurrentSeries" type="button">Current</button>
       <button class="set-btn" id="deletePattern" type="button">Delete</button>
     </div>
     <p id="patternInfo">Open a supported episode to configure this.</p>

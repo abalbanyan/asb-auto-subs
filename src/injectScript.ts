@@ -107,7 +107,13 @@ if (!globalWindow.asbAutoSubsInjected) {
         break;
       case "notifyLoadedIntoAsb":
         createToast(
-          successMessage("Successfully downloaded and loaded subtitles", message),
+          loadedSubtitlesMessage("Loaded subtitles", message),
+          "#0a9611",
+        );
+        break;
+      case "notifySubtitleSwitched":
+        createToast(
+          subtitleSwitchedMessage("Switched loaded subtitle file", message),
           "#0a9611",
         );
         break;
@@ -142,6 +148,25 @@ function successMessage(
 
   if (!title || episode === null) return baseMessage;
   return `${baseMessage} for ${title} episode ${episode}`;
+}
+
+function loadedSubtitlesMessage(
+  baseMessage: string,
+  message: { title?: unknown; episode?: unknown; name?: unknown },
+) {
+  const name = typeof message.name === "string" ? message.name.trim() : "";
+  const prefix = successMessage(baseMessage, message);
+  if (!name) return prefix;
+  return `${prefix}: ${name}`;
+}
+
+function subtitleSwitchedMessage(
+  baseMessage: string,
+  message: { name?: unknown },
+) {
+  const name = typeof message.name === "string" ? message.name.trim() : "";
+  if (!name) return baseMessage;
+  return `${baseMessage}: ${name}`;
 }
 
 function createToast(msg: string, color: string, options: ToastOptions = {}) {
@@ -183,7 +208,7 @@ function createToast(msg: string, color: string, options: ToastOptions = {}) {
 
   setTimeout(() => {
     removeToast(toast, toastContainer);
-  }, 3000);
+  }, 3500);
 }
 
 function removeMissingApiKeyToasts() {

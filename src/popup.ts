@@ -1,14 +1,33 @@
-import { AnimeMetaData, DisabledSeries, SubtitlePatterns } from "./types";
+import { AnimeMetaData, DisabledSeries, Subs, SubtitlePatterns } from "./types";
 
 type JimakuSubtitlesLink = {
   url: string;
+};
+
+type SeriesSubtitles = {
+  subs: Subs[];
+  error?: string;
+};
+
+type RefreshCurrentSubtitlesResponse = {
+  refreshed: boolean;
+  alreadyDownloaded?: boolean;
+  error?: string;
+};
+
+type SubtitleSourceSuggestion = {
+  label: string;
+  pattern: string;
+  fileCount: number;
 };
 
 const subtitlePatternsKeyName = "subtitlePatterns";
 const disabledSeriesKeyName = "disabledSeries";
 const apiKeyAttentionFlagName = "highlightApiKeyOnNextSettingsOpen";
 let currentAnimeTitle: string | null = null;
+let currentAnimeMetaData: AnimeMetaData | null = null;
 let editingSeriesTitle: string | null = null;
+let editingSeriesSavedPattern = "";
 
 document
   .getElementById("apiKeyForm")
@@ -144,16 +163,18 @@ document
     const pattern = (
       document.getElementById("subtitlePattern") as HTMLInputElement
     ).value.trim();
-    const savedTitle = editingSeriesTitle;
-    await saveSubtitlePattern(savedTitle, pattern);
-    setEditingSeries(savedTitle, await loadSubtitlePatterns());
-    await refreshSavedSeries(editingSeriesTitle);
-    if (savedTitle === currentAnimeTitle) {
-      await refreshCurrentSubtitles();
-    }
-    setPatternInfo(
+    await saveFilterAndApply(
+      pattern,
       pattern ? "Subtitle preference saved." : "Subtitle preference deleted.",
     );
+  });
+
+document
+  .getElementById("subtitlePattern")
+  ?.addEventListener("input", function (event) {
+    const pattern = (event.target as HTMLInputElement).value.trim();
+    setActiveSourceSuggestion(pattern);
+    updateSaveButtonState();
   });
 
 document
@@ -173,18 +194,12 @@ document
       setEditingSeries(nextTitle, patterns);
     } else {
       editingSeriesTitle = null;
-      setEditingSeriesLabel();
+      editingSeriesSavedPattern = "";
       setPatternControlsEnabled(false);
     }
     await refreshSavedSeries(editingSeriesTitle);
+    await refreshSubtitleSourceSuggestionsForEditingSeries();
     setPatternInfo(`Deleted preference for ${deletedTitle}.`);
-  });
-
-document
-  .getElementById("useCurrentSeries")
-  ?.addEventListener("click", async function () {
-    if (!currentAnimeTitle) return;
-    setEditingSeries(currentAnimeTitle, await loadSubtitlePatterns());
   });
 
 document
@@ -193,6 +208,7 @@ document
     const title = (event.target as HTMLSelectElement).value;
     if (!title) return;
     setEditingSeries(title, await loadSubtitlePatterns());
+    await refreshSubtitleSourceSuggestionsForEditingSeries();
   });
 
 async function saveSubtitlePattern(title: string, pattern: string) {
@@ -215,11 +231,46 @@ async function loadDisabledSeries() {
   return <DisabledSeries>(result[disabledSeriesKeyName] || {});
 }
 
-async function refreshCurrentSubtitles() {
-  try {
-    await chrome.runtime.sendMessage({ action: "refreshCurrentSubtitles" });
-  } catch {
+async function saveFilterAndApply(pattern: string, savedMessage: string) {
+  if (!editingSeriesTitle) return;
+
+  const savedTitle = editingSeriesTitle;
+  await saveSubtitlePattern(savedTitle, pattern);
+  const patterns = await loadSubtitlePatterns();
+  setEditingSeries(savedTitle, patterns);
+  await refreshSavedSeries(savedTitle);
+
+  if (savedTitle !== currentAnimeTitle) {
+    setPatternInfo(savedMessage);
     return;
+  }
+
+  const result = await refreshCurrentSubtitles(true);
+  if (result?.refreshed) {
+    setPatternInfo(`${savedMessage} Loaded matching subtitle.`);
+    return;
+  }
+  if (result?.alreadyDownloaded) {
+    setPatternInfo(`${savedMessage} Selected subtitle is unchanged.`);
+    return;
+  }
+  if (result?.error) {
+    setPatternInfo(`${savedMessage} Could not load subtitle: ${result.error}`);
+    return;
+  }
+  setPatternInfo(savedMessage);
+}
+
+async function refreshCurrentSubtitles(notifySwitch = false) {
+  try {
+    return <RefreshCurrentSubtitlesResponse>(
+      await chrome.runtime.sendMessage({
+        action: "refreshCurrentSubtitles",
+        notifySwitch,
+      })
+    );
+  } catch {
+    return null;
   }
 }
 
@@ -255,42 +306,255 @@ async function loadJimakuSubtitlesLink(animeMetaData: AnimeMetaData) {
   setJimakuSubtitlesLink(jimakuLink.url);
 }
 
+function normalizeSubtitlePattern(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function filenameStem(name: string) {
+  return name.replace(/\.(?:srt|ass|zip|sub|sup|idx|rar|7z)$/i, "");
+}
+
+function splitFilenameParts(value: string) {
+  return value
+    .split(/[._\s]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function isEpisodeMarkerPart(part: string) {
+  const normalized = normalizeSubtitlePattern(part);
+  return (
+    /^s\d+e\d+$/i.test(part) ||
+    /^e\d{1,3}$/i.test(part) ||
+    /^\d{1,3}$/.test(normalized) ||
+    /第\s*\d+\s*(?:話|幕|章|回)?/.test(part)
+  );
+}
+
+function isSpecificEpisodeMarkerPart(part: string) {
+  return /^s\d+e\d+$/i.test(part) ||
+    /^e\d{1,3}$/i.test(part) ||
+    /第\s*\d+\s*(?:話|幕|章|回)?/.test(part);
+}
+
+function isEpisodeTitlePart(part: string) {
+  return /[《》]/.test(part) || /第\s*\d+\s*(?:話|幕|章|回)?/.test(part);
+}
+
+function isReleaseStartPart(part: string) {
+  const normalized = normalizeSubtitlePattern(part);
+  return (
+    /^\d{3,4}p$/.test(normalized) ||
+    /^(?:web|web dl|webrip|bdrip|bluray|hdtv|dtv|dvd|aac\d*|flac|opus|hevc|avc|x264|x265|h\s?264|h\s?265)$/.test(
+      normalized,
+    )
+  );
+}
+
+function unbracketedReleaseSuggestion(name: string) {
+  const parts = splitFilenameParts(filenameStem(name.normalize("NFKC")));
+  const episodePartIndex = parts.findIndex(isEpisodeMarkerPart);
+  let releaseParts =
+    episodePartIndex >= 0 ? parts.slice(episodePartIndex + 1) : parts;
+
+  while (releaseParts.length > 0 && isEpisodeTitlePart(releaseParts[0])) {
+    releaseParts = releaseParts.slice(1);
+  }
+
+  const releaseStartIndex = releaseParts.findIndex(isReleaseStartPart);
+  if (releaseStartIndex >= 0) {
+    releaseParts = releaseParts.slice(releaseStartIndex);
+  } else if (episodePartIndex >= 0 && releaseParts.length > 0) {
+    releaseParts = releaseParts.slice(Math.max(0, releaseParts.length - 4));
+  } else {
+    return null;
+  }
+
+  releaseParts = releaseParts.filter(
+    (part) => !isSpecificEpisodeMarkerPart(part),
+  );
+  if (releaseParts.length === 0) return null;
+
+  const pattern = releaseParts.join(".");
+  return { label: pattern, pattern };
+}
+
+function sourceSuggestionForSubtitleName(name: string) {
+  const leadingBracket = name.normalize("NFKC").match(/^\s*\[([^\]]+)\]/);
+  if (leadingBracket) {
+    const source = leadingBracket[1].trim();
+    return { label: source, pattern: source };
+  }
+
+  return unbracketedReleaseSuggestion(name);
+}
+
+function subtitleSourceSuggestions(subs: Subs[]) {
+  const suggestions = new Map<string, SubtitleSourceSuggestion>();
+
+  for (const sub of subs) {
+    const sourceSuggestion = sourceSuggestionForSubtitleName(sub.name);
+    if (!sourceSuggestion) continue;
+
+    const key = normalizeSubtitlePattern(sourceSuggestion.pattern);
+    const existing = suggestions.get(key);
+    if (existing) {
+      existing.fileCount += 1;
+      continue;
+    }
+
+    suggestions.set(key, {
+      label: sourceSuggestion.label,
+      pattern: sourceSuggestion.pattern,
+      fileCount: 1,
+    });
+  }
+
+  return Array.from(suggestions.values()).sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+}
+
+function setActiveSourceSuggestion(pattern: string) {
+  const normalizedPattern = normalizeSubtitlePattern(pattern);
+  const buttons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(".source-suggestion"),
+  );
+  for (const button of buttons) {
+    button.classList.toggle(
+      "active",
+      normalizeSubtitlePattern(button.dataset.pattern || "") ===
+        normalizedPattern,
+    );
+  }
+}
+
+function renderSubtitleSourceSuggestions(
+  suggestions: SubtitleSourceSuggestion[],
+  activePattern: string,
+) {
+  const container = document.getElementById("sourceSuggestions")!;
+  const list = document.getElementById("sourceSuggestionList")!;
+  list.textContent = "";
+
+  if (suggestions.length === 0) {
+    container.hidden = true;
+    return;
+  }
+
+  for (const suggestion of suggestions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "source-suggestion";
+    button.dataset.pattern = suggestion.pattern;
+    button.textContent = suggestion.label;
+    button.title = `Save filter: ${suggestion.pattern}`;
+    button.addEventListener("click", async () => {
+      (document.getElementById("subtitlePattern") as HTMLInputElement).value =
+        suggestion.pattern;
+      setActiveSourceSuggestion(suggestion.pattern);
+      await saveFilterAndApply(
+        suggestion.pattern,
+        `Subtitle preference saved for ${suggestion.label}.`,
+      );
+    });
+    list.append(button);
+  }
+
+  container.hidden = false;
+  setActiveSourceSuggestion(activePattern);
+}
+
+function clearSubtitleSourceSuggestions() {
+  renderSubtitleSourceSuggestions([], "");
+}
+
+async function loadSubtitleSourceSuggestions(
+  title: string,
+  anilistId?: number,
+  fallbackEpisode?: number,
+) {
+  clearSubtitleSourceSuggestions();
+
+  try {
+    const result = <SeriesSubtitles>(
+      await chrome.runtime.sendMessage({
+        action: "getSeriesSubtitles",
+        anilistId,
+        title,
+        episode: fallbackEpisode,
+      })
+    );
+    renderSubtitleSourceSuggestions(
+      subtitleSourceSuggestions(result.subs || []),
+      (document.getElementById("subtitlePattern") as HTMLInputElement).value,
+    );
+  } catch {
+    clearSubtitleSourceSuggestions();
+  }
+}
+
+async function refreshSubtitleSourceSuggestionsForEditingSeries() {
+  if (!editingSeriesTitle) {
+    clearSubtitleSourceSuggestions();
+    return;
+  }
+
+  const currentMetaData =
+    currentAnimeMetaData && editingSeriesTitle === currentAnimeMetaData.title
+      ? currentAnimeMetaData
+      : null;
+  await loadSubtitleSourceSuggestions(
+    editingSeriesTitle,
+    currentMetaData?.anilistId,
+    currentMetaData?.episode,
+  );
+}
+
 function setPatternInfo(text: string) {
   document.getElementById("patternInfo")!.textContent = text;
 }
 
+function subtitlePatternInput() {
+  return document.getElementById("subtitlePattern") as HTMLInputElement;
+}
+
+function savePatternButton() {
+  return document.querySelector(
+    "#subtitlePatternForm button[type='submit']",
+  ) as HTMLButtonElement;
+}
+
+function updateSaveButtonState() {
+  const subtitlePattern = subtitlePatternInput();
+  const pattern = subtitlePattern.value.trim();
+  savePatternButton().disabled =
+    subtitlePattern.disabled ||
+    !editingSeriesTitle ||
+    pattern === editingSeriesSavedPattern.trim();
+}
+
 function setPatternControlsEnabled(enabled: boolean) {
-  const subtitlePattern = document.getElementById(
-    "subtitlePattern",
-  ) as HTMLInputElement;
+  const subtitlePattern = subtitlePatternInput();
   subtitlePattern.disabled = !enabled;
   subtitlePattern.placeholder = enabled
     ? ""
     : "Select a series to specify a filter";
-  (document.querySelector("#subtitlePatternForm button[type='submit']") as HTMLButtonElement).disabled =
-    !enabled;
+  updateSaveButtonState();
   (document.getElementById("deletePattern") as HTMLButtonElement).disabled =
     !enabled;
-  (document.getElementById("useCurrentSeries") as HTMLButtonElement).disabled =
-    !currentAnimeTitle;
-}
-
-function setEditingSeriesLabel() {
-  document.getElementById("editingSeries")!.textContent = editingSeriesTitle
-    ? editingSeriesTitle
-    : "none";
 }
 
 function setEditingSeries(title: string, patterns: SubtitlePatterns) {
   editingSeriesTitle = title;
-  setEditingSeriesLabel();
-  (document.getElementById("subtitlePattern") as HTMLInputElement).value =
-    patterns[title] || "";
-  setPatternInfo(
-    patterns[title]
-      ? "This series has a saved subtitle preference."
-      : "No subtitle preference saved for this series.",
-  );
+  editingSeriesSavedPattern = patterns[title] || "";
+  subtitlePatternInput().value = editingSeriesSavedPattern;
+  setActiveSourceSuggestion(editingSeriesSavedPattern);
+  setPatternInfo("");
   setPatternControlsEnabled(true);
   (document.getElementById("deletePattern") as HTMLButtonElement).disabled =
     !patterns[title];
@@ -319,7 +583,10 @@ async function refreshSavedSeries(selectedTitle: string | null) {
 async function loadCurrentAnime() {
   const currentSeries = document.getElementById("currentSeries")!;
   const currentEpisode = document.getElementById("currentEpisode")!;
+  currentAnimeTitle = null;
+  currentAnimeMetaData = null;
   setPatternControlsEnabled(false);
+  clearSubtitleSourceSuggestions();
   await refreshSavedSeries(null);
 
   let animeMetaData: AnimeMetaData | null = null;
@@ -334,6 +601,7 @@ async function loadCurrentAnime() {
     currentSeries.textContent = "No supported series detected";
     currentEpisode.textContent = "No supported episode detected";
     setJimakuSubtitlesLink();
+    clearSubtitleSourceSuggestions();
     const patterns = await loadSubtitlePatterns();
     const firstSavedSeries = Object.keys(patterns).sort((a, b) =>
       a.localeCompare(b),
@@ -341,6 +609,7 @@ async function loadCurrentAnime() {
     if (firstSavedSeries) {
       setEditingSeries(firstSavedSeries, patterns);
       await refreshSavedSeries(firstSavedSeries);
+      await refreshSubtitleSourceSuggestionsForEditingSeries();
     } else {
       setPatternInfo("Open a supported episode to configure this.");
     }
@@ -348,6 +617,7 @@ async function loadCurrentAnime() {
   }
 
   currentAnimeTitle = animeMetaData.title;
+  currentAnimeMetaData = animeMetaData;
   currentSeries.textContent = animeMetaData.title;
   currentEpisode.textContent = `Episode ${animeMetaData.episode}`;
   await loadJimakuSubtitlesLink(animeMetaData);
@@ -359,6 +629,7 @@ async function loadCurrentAnime() {
   const patterns = await loadSubtitlePatterns();
   setEditingSeries(animeMetaData.title, patterns);
   await refreshSavedSeries(animeMetaData.title);
+  await refreshSubtitleSourceSuggestionsForEditingSeries();
 }
 
 loadCurrentAnime();

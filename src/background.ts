@@ -85,11 +85,26 @@ async function notifySuccess(
   tabId: number,
   loadedIntoAsb: boolean,
   animeMetaData: Pick<AnimeMetaData, "title" | "episode">,
+  name: string,
 ) {
   await chrome.tabs.sendMessage(tabId, {
     action: loadedIntoAsb ? "notifyLoadedIntoAsb" : "notifySuccess",
     title: animeMetaData.title,
     episode: animeMetaData.episode,
+    name,
+  });
+}
+
+async function notifySubtitleSwitched(
+  tabId: number,
+  animeMetaData: Pick<AnimeMetaData, "title" | "episode">,
+  name: string,
+) {
+  await chrome.tabs.sendMessage(tabId, {
+    action: "notifySubtitleSwitched",
+    title: animeMetaData.title,
+    episode: animeMetaData.episode,
+    name,
   });
 }
 
@@ -291,7 +306,7 @@ async function currentAnimeContext() {
   return { ...animeMetaData, tabId: tab.id, anilistId };
 }
 
-async function fetchSubs(anilistId: number, episode: number) {
+async function fetchSubtitleFiles(anilistId: number, episode?: number) {
   const jimakuAPIKey = await getJimakuApiKey();
 
   try {
@@ -303,23 +318,20 @@ async function fetchSubs(anilistId: number, episode: number) {
       return `No subtitles found for this anime`;
     }
     const id = jimakuEntry[0].id;
-    const filesResponse = await fetch(
-      jimakuApiBaseUrl + `/entries/${id}/files?episode=${episode}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `${jimakuAPIKey}`,
-        },
+    const filesUrl = new URL(`/api/entries/${id}/files`, jimakuBaseUrl);
+    if (typeof episode === "number") {
+      filesUrl.searchParams.set("episode", String(episode));
+    }
+    const filesResponse = await fetch(filesUrl.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `${jimakuAPIKey}`,
       },
-    );
+    });
     if (!filesResponse.ok) {
       return jimakuErrorForStatus(filesResponse.status);
     }
-    const subs: Subs[] = await filesResponse.json();
-    if (subs.length === 0) {
-      return `No subtitles for episode ${episode} could be found`;
-    }
-    return subs;
+    return <Subs[]>await filesResponse.json();
   } catch (e) {
     if (typeof e === "string") {
       e.toUpperCase();
@@ -328,6 +340,15 @@ async function fetchSubs(anilistId: number, episode: number) {
     }
     return "There was an error";
   }
+}
+
+async function fetchSubs(anilistId: number, episode: number) {
+  const subs = await fetchSubtitleFiles(anilistId, episode);
+  if (typeof subs === "string") return subs;
+  if (subs.length === 0) {
+    return `No subtitles for episode ${episode} could be found`;
+  }
+  return subs;
 }
 
 async function markMultipleAsDownloaded(filename: string, anilistId: number) {
@@ -444,7 +465,7 @@ async function downloadSubs(
       }
     },
   );
-  return { loadedIntoAsb };
+  return { loadedIntoAsb, name };
 }
 
 async function removeLastDownloaded() {
@@ -536,8 +557,13 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
         action: "alreadyDownloadedInfo",
       });
     } else if (result.error) notifyError(details.tabId, result.error);
-    else {
-      notifySuccess(details.tabId, !!result.loadedIntoAsb, { title, episode });
+    else if (result.name) {
+      notifySuccess(
+        details.tabId,
+        !!result.loadedIntoAsb,
+        { title, episode },
+        result.name,
+      );
     }
   });
 });
@@ -581,6 +607,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "getSeriesSubtitles") {
+    (async () => {
+      const title = typeof message.title === "string" ? message.title : "";
+      const episode =
+        typeof message.episode === "number" && Number.isFinite(message.episode)
+          ? message.episode
+          : null;
+      let anilistId =
+        typeof message.anilistId === "number" &&
+        Number.isFinite(message.anilistId)
+          ? message.anilistId
+          : null;
+
+      if (!anilistId && !title) {
+        sendResponse({ subs: [] });
+        return;
+      }
+
+      if (!anilistId) {
+        anilistId = (await fetchAnilistId(title)) || null;
+      }
+      if (!anilistId) {
+        sendResponse({ subs: [] });
+        return;
+      }
+
+      const hasEpisode = typeof episode === "number";
+      let subs = hasEpisode
+        ? await fetchSubtitleFiles(anilistId, episode)
+        : await fetchSubtitleFiles(anilistId);
+      if (hasEpisode && (typeof subs === "string" || subs.length === 0)) {
+        subs = await fetchSubtitleFiles(anilistId);
+      }
+      if (typeof subs === "string") {
+        sendResponse({ subs: [], error: subs });
+        return;
+      }
+
+      sendResponse({ subs });
+    })();
+    return true;
+  }
+
   if (message.action === "openExtensionPopup") {
     openExtensionPopup(true).then(sendResponse);
     return true;
@@ -608,6 +677,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         context.anilistId,
         context.episode,
       );
+      if (
+        message.notifySwitch &&
+        result.loadedIntoAsb &&
+        result.name &&
+        !result.alreadyDownloaded
+      ) {
+        await notifySubtitleSwitched(
+          context.tabId,
+          { title: context.title, episode: context.episode },
+          result.name,
+        );
+      }
       sendResponse({
         refreshed: !result.error && !result.alreadyDownloaded,
         alreadyDownloaded: !!result.alreadyDownloaded,
