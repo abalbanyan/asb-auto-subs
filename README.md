@@ -2,8 +2,6 @@
 
 Auto-load asbplayer Subtitles automatically finds Japanese subtitle files from [Jimaku](https://jimaku.cc) for the anime episode you are watching. It downloads the selected subtitle file and loads supported subtitle formats directly into [asbplayer](https://github.com/killergerbah/asbplayer).
 
-This version is forked from [GodPepe7/asb-auto-subs](https://github.com/GodPepe7/asb-auto-subs).
-
 ## Features
 
 - Detects the current anime series and episode on Crunchyroll.

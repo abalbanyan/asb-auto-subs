@@ -9,14 +9,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/GodPepe7/asb-auto-subs.git"
+    "url": "git+https://github.com/abalbanyan/asb-auto-subs.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/GodPepe7/asb-auto-subs/issues"
+    "url": "https://github.com/abalbanyan/asb-auto-subs/issues"
   },
-  "homepage": "https://github.com/GodPepe7/asb-auto-subs#readme",
+  "homepage": "https://github.com/abalbanyan/asb-auto-subs#readme",
   "devDependencies": {
     "@types/chrome": "^0.0.268",
     "chrome-types": "^0.1.285",
