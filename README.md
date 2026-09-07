@@ -1,6 +1,6 @@
-# ASB Auto Subs
+# Auto-load asbplayer Subtitles
 
-ASB Auto Subs automatically finds Japanese subtitle files from [Jimaku](https://jimaku.cc) for the anime episode you are watching. It downloads the selected subtitle file and loads supported subtitle formats directly into [ASB Player](https://github.com/killergerbah/asbplayer).
+Auto-load asbplayer Subtitles automatically finds Japanese subtitle files from [Jimaku](https://jimaku.cc) for the anime episode you are watching. It downloads the selected subtitle file and loads supported subtitle formats directly into [asbplayer](https://github.com/killergerbah/asbplayer).
 
 This version is forked from [GodPepe7/asb-auto-subs](https://github.com/GodPepe7/asb-auto-subs).
 
@@ -10,7 +10,7 @@ This version is forked from [GodPepe7/asb-auto-subs](https://github.com/GodPepe7
 - Handles Crunchyroll episode changes without requiring a full page reload.
 - Resolves Crunchyroll seasons separately so later seasons use the correct Jimaku entry.
 - Downloads matching subtitle files from Jimaku automatically.
-- Loads supported subtitle files directly into ASB Player when available.
+- Loads supported subtitle files directly into asbplayer when available.
 - Supports saved per-series filename filters for choosing a preferred subtitle release.
 - Supports disabling downloads for a specific series.
 - Supports temporarily disabling the extension globally.
@@ -18,7 +18,7 @@ This version is forked from [GodPepe7/asb-auto-subs](https://github.com/GodPepe7
 
 ## Setup
 
-1. Install [ASB Player](https://github.com/killergerbah/asbplayer).
+1. Install [asbplayer](https://github.com/killergerbah/asbplayer).
 2. Download and unzip this extension, or build it locally.
 3. Open `chrome://extensions/` in Chrome.
 4. Enable Developer mode.
