@@ -96,6 +96,9 @@ if (!globalWindow.asbAutoSubsInjected) {
       case "notifyError":
         createToast(message.error, "#a51f07");
         break;
+      case "notifyStatus":
+        createToast(message.message, "#b7791f");
+        break;
       case "notifyMissingJimakuApiKey":
         createToast(message.message, "#a51f07", {
           persistent: true,

@@ -14,7 +14,6 @@ const disabledSeriesKeyName = "disabledSeries";
 const disabledKeyName = "disabled";
 const apiKeyAttentionFlagName = "highlightApiKeyOnNextSettingsOpen";
 const jimakuBaseUrl = "https://jimaku.cc";
-const jimakuApiBaseUrl = `${jimakuBaseUrl}/api`;
 const jimakuErrors = new Map([
   [400, "Something went wrong! This shouldn't happen"],
   [401, "Authentification failed. Check your API Key"],
@@ -27,16 +26,27 @@ const jimakuErrors = new Map([
 let lastProcessedUrl = "";
 let lastMissingApiKeyPromptUrl = "";
 
-function episodeKey(id: number, episode: number) {
+type SubtitleLookup = {
+  storageId: string | number;
+  anilistId?: number;
+  jimakuEntryId?: number;
+};
+
+type AnilistIdLookupResult = {
+  id: number | null;
+  unavailable: boolean;
+};
+
+function episodeKey(id: string | number, episode: number) {
   return `${id}_${episode}`;
 }
 
-function selectedSubtitleKey(id: number, episode: number) {
+function selectedSubtitleKey(id: string | number, episode: number) {
   return `${episodeKey(id, episode)}_selectedSubtitle`;
 }
 
 async function alreadyDownloaded(
-  id: number,
+  id: string | number,
   episode: number,
   selectedSubtitleName: string,
 ) {
@@ -79,6 +89,10 @@ async function notifyMissingJimakuApiKey(tabId: number) {
     action: "notifyMissingJimakuApiKey",
     message: "A Jimaku API key is required to download subtitles. Click here to set your key.",
   });
+}
+
+async function notifyStatus(tabId: number, message: string) {
+  await chrome.tabs.sendMessage(tabId, { action: "notifyStatus", message });
 }
 
 async function notifySuccess(
@@ -134,7 +148,9 @@ async function loadSubsIntoAsb(tabId: number, url: string, name: string) {
   }
 }
 
-async function fetchAnilistId(title: string) {
+async function fetchAnilistId(
+  title: string,
+): Promise<AnilistIdLookupResult> {
   const query = `
   query ($title: String) {
     Media (search: $title, type: ANIME) {
@@ -156,18 +172,32 @@ async function fetchAnilistId(title: string) {
   };
   try {
     const anilistResponse = await fetch(url, options);
-    if (!anilistResponse.ok) {
-      return;
+    let anilistObject: AnilistObject | null = null;
+    try {
+      anilistObject = await anilistResponse.json();
+    } catch {
+      anilistObject = null;
     }
-    const anilistObject: AnilistObject = await anilistResponse.json();
-    return anilistObject.data.Media.id;
+    if (!anilistResponse.ok) {
+      return <AnilistIdLookupResult>{
+        id: null,
+        unavailable: anilistResponse.status === 403,
+      };
+    }
+    return <AnilistIdLookupResult>{
+      id: anilistObject?.data?.Media?.id || null,
+      unavailable: !!anilistObject?.errors?.some((error) => error.status === 403),
+    };
   } catch (e) {
     if (typeof e === "string") {
       e.toUpperCase();
     } else if (e instanceof Error) {
       console.error(e.message);
     }
-    return;
+    return <AnilistIdLookupResult>{
+      id: null,
+      unavailable: true,
+    };
   }
 }
 
@@ -214,25 +244,35 @@ function jimakuErrorForStatus(status: number) {
   return jimakuErrors.get(status) || "Something went wrong";
 }
 
-async function fetchJimakuEntries(anilistId: number) {
+async function fetchJimakuEntries(search: {
+  anilistId?: number;
+  title?: string;
+}) {
   const jimakuAPIKey = await getJimakuApiKey();
+  const searchUrl = new URL("/api/entries/search", jimakuBaseUrl);
+
+  if (typeof search.anilistId === "number") {
+    searchUrl.searchParams.set("anilist_id", String(search.anilistId));
+  } else if (search.title?.trim()) {
+    searchUrl.searchParams.set("query", search.title.trim());
+    searchUrl.searchParams.set("anime", "true");
+  } else {
+    return [];
+  }
 
   try {
-    const searchResponse = await fetch(
-      `${jimakuApiBaseUrl}/entries/search?anilist_id=${anilistId}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `${jimakuAPIKey}`,
-        },
+    const searchResponse = await fetch(searchUrl.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `${jimakuAPIKey}`,
       },
-    );
+    });
 
     if (!searchResponse.ok) {
       return jimakuErrorForStatus(searchResponse.status);
     }
 
-    return <JimakuEntry[]>await searchResponse.json();
+    return jimakuEntriesFromResponse(await searchResponse.json());
   } catch (e) {
     if (typeof e === "string") {
       e.toUpperCase();
@@ -243,9 +283,63 @@ async function fetchJimakuEntries(anilistId: number) {
   }
 }
 
+function jimakuEntriesFromResponse(response: unknown) {
+  if (Array.isArray(response)) return <JimakuEntry[]>response;
+  if (response && typeof response === "object" && "id" in response) {
+    return <JimakuEntry[]>[response];
+  }
+  return [];
+}
+
 function jimakuEntryUrl(entryId: number) {
   const url = new URL(`/entry/${entryId}`, jimakuBaseUrl);
   return url.toString();
+}
+
+async function resolveSubtitleLookup(
+  title: string,
+  anilistId?: number | null,
+  statusTabId?: number,
+) {
+  if (typeof anilistId === "number" && Number.isFinite(anilistId)) {
+    return <SubtitleLookup>{
+      storageId: anilistId,
+      anilistId,
+    };
+  }
+
+  const fetchedAnilistId = await fetchAnilistId(title);
+  if (fetchedAnilistId.id) {
+    return <SubtitleLookup>{
+      storageId: fetchedAnilistId.id,
+      anilistId: fetchedAnilistId.id,
+    };
+  }
+
+  if (fetchedAnilistId.unavailable && statusTabId) {
+    await notifyStatus(
+      statusTabId,
+      "AniList API unavailable, falling back to Jimaku title search...",
+    );
+  }
+
+  const jimakuEntries = await fetchJimakuEntries({ title });
+  if (typeof jimakuEntries === "string") return jimakuEntries;
+  const jimakuEntry = jimakuEntries[0];
+  if (!jimakuEntry) return null;
+
+  return <SubtitleLookup>{
+    storageId: `jimaku:${jimakuEntry.id}`,
+    anilistId: jimakuEntry.anilist_id,
+    jimakuEntryId: jimakuEntry.id,
+  };
+}
+
+async function fetchJimakuEntriesForLookup(lookup: SubtitleLookup) {
+  if (lookup.jimakuEntryId) {
+    return <JimakuEntry[]>[{ id: lookup.jimakuEntryId }];
+  }
+  return await fetchJimakuEntries({ anilistId: lookup.anilistId });
 }
 
 async function getAnimeMetaData(tabId: number, animeSiteKey: string) {
@@ -297,20 +391,26 @@ async function currentAnimeContext() {
   const animeMetaData = await getAnimeMetaData(tab.id, animeSiteKey);
   if (!animeMetaData?.title || !animeMetaData.episode) return null;
 
-  let anilistId = animeMetaData.anilistId;
-  if (!anilistId) {
-    anilistId = await fetchAnilistId(animeMetaData.title);
-  }
-  if (!anilistId) return null;
+  const subtitleLookup = await resolveSubtitleLookup(
+    animeMetaData.title,
+    animeMetaData.anilistId,
+    tab.id,
+  );
+  if (!subtitleLookup || typeof subtitleLookup === "string") return null;
 
-  return { ...animeMetaData, tabId: tab.id, anilistId };
+  return {
+    ...animeMetaData,
+    tabId: tab.id,
+    anilistId: subtitleLookup.anilistId,
+    subtitleLookup,
+  };
 }
 
-async function fetchSubtitleFiles(anilistId: number, episode?: number) {
+async function fetchSubtitleFiles(lookup: SubtitleLookup, episode?: number) {
   const jimakuAPIKey = await getJimakuApiKey();
 
   try {
-    const jimakuEntry = await fetchJimakuEntries(anilistId);
+    const jimakuEntry = await fetchJimakuEntriesForLookup(lookup);
     if (typeof jimakuEntry === "string") {
       return jimakuEntry;
     }
@@ -342,8 +442,8 @@ async function fetchSubtitleFiles(anilistId: number, episode?: number) {
   }
 }
 
-async function fetchSubs(anilistId: number, episode: number) {
-  const subs = await fetchSubtitleFiles(anilistId, episode);
+async function fetchSubs(lookup: SubtitleLookup, episode: number) {
+  const subs = await fetchSubtitleFiles(lookup, episode);
   if (typeof subs === "string") return subs;
   if (subs.length === 0) {
     return `No subtitles for episode ${episode} could be found`;
@@ -351,7 +451,7 @@ async function fetchSubs(anilistId: number, episode: number) {
   return subs;
 }
 
-async function markMultipleAsDownloaded(filename: string, anilistId: number) {
+async function markMultipleAsDownloaded(filename: string, id: string | number) {
   const rangePattern = /\d+[-~]\d+/;
   const match = filename.match(rangePattern);
   if (!match) return;
@@ -363,7 +463,7 @@ async function markMultipleAsDownloaded(filename: string, anilistId: number) {
     episodes = episodeRange.split("~").map((episode) => parseInt(episode));
   }
   for (let i = episodes[0]; i < episodes[1]; i++) {
-    const key = `${anilistId}_${i}`;
+    const key = episodeKey(id, i);
     await chrome.storage.local.set({ [key]: true });
   }
 }
@@ -414,10 +514,10 @@ function normalizeSubtitlePattern(value: string) {
 async function downloadSubs(
   tabId: number,
   title: string,
-  anilistId: number,
+  lookup: SubtitleLookup,
   episode: number,
 ) {
-  const subs = await fetchSubs(anilistId, episode);
+  const subs = await fetchSubs(lookup, episode);
   if (typeof subs === "string") {
     return { error: subs };
   }
@@ -426,7 +526,7 @@ async function downloadSubs(
   const preferredPattern = await subtitlePatternForTitle(title);
   const { url, name } = selectSubtitleFile(subs, preferredPattern);
   const hasAlreadyBeenDownloaded = await alreadyDownloaded(
-    anilistId,
+    lookup.storageId,
     episode,
     name,
   );
@@ -454,13 +554,13 @@ async function downloadSubs(
         return chrome.runtime.lastError.message;
       }
       if (name.endsWith(".zip") || name.endsWith(".rar")) {
-        await markMultipleAsDownloaded(name, anilistId);
+        await markMultipleAsDownloaded(name, lookup.storageId);
       } else {
-        const key = episodeKey(anilistId, episode);
+        const key = episodeKey(lookup.storageId, episode);
         await chrome.storage.local.set({
           [lastDownloadedKeyName]: key,
           [key]: downloadId,
-          [selectedSubtitleKey(anilistId, episode)]: name,
+          [selectedSubtitleKey(lookup.storageId, episode)]: name,
         });
       }
     },
@@ -535,23 +635,32 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
 
     const animeMetaData = await getAnimeMetaData(details.tabId, animeSiteKey);
     if (!animeMetaData) return;
-    let anilistId = animeMetaData.anilistId;
     const { title, episode } = animeMetaData;
     if (!episode || !title) {
       notifyError(details.tabId, "Couldn't get anime data");
       return;
     }
     if (await isSeriesDisabled(title)) return;
-    if (!anilistId) {
-      const id = await fetchAnilistId(title);
-      if (!id) {
-        notifyError(details.tabId, "Failed fetching AnilistId");
-        return;
-      }
-      anilistId = id;
+    const subtitleLookup = await resolveSubtitleLookup(
+      title,
+      animeMetaData.anilistId,
+      details.tabId,
+    );
+    if (typeof subtitleLookup === "string") {
+      notifyError(details.tabId, subtitleLookup);
+      return;
+    }
+    if (!subtitleLookup) {
+      notifyError(details.tabId, "Failed resolving subtitles entry");
+      return;
     }
     if (await isExtensionDisabled() || await isSeriesDisabled(title)) return;
-    const result = await downloadSubs(details.tabId, title, anilistId, episode);
+    const result = await downloadSubs(
+      details.tabId,
+      title,
+      subtitleLookup,
+      episode,
+    );
     if (result.alreadyDownloaded) {
       chrome.tabs.sendMessage(details.tabId, {
         action: "alreadyDownloadedInfo",
@@ -577,7 +686,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getJimakuSubtitlesLink") {
     (async () => {
       const title = typeof message.title === "string" ? message.title : "";
-      let anilistId =
+      const anilistId =
         typeof message.anilistId === "number" &&
         Number.isFinite(message.anilistId)
           ? message.anilistId
@@ -588,15 +697,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      if (!anilistId) {
-        anilistId = (await fetchAnilistId(title)) || null;
-      }
-      if (!anilistId) {
+      const subtitleLookup = await resolveSubtitleLookup(title, anilistId);
+      if (!subtitleLookup || typeof subtitleLookup === "string") {
         sendResponse(null);
         return;
       }
 
-      const jimakuEntry = await fetchJimakuEntries(anilistId);
+      const jimakuEntry = await fetchJimakuEntriesForLookup(subtitleLookup);
       if (typeof jimakuEntry === "string" || jimakuEntry.length === 0) {
         sendResponse(null);
         return;
@@ -614,7 +721,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         typeof message.episode === "number" && Number.isFinite(message.episode)
           ? message.episode
           : null;
-      let anilistId =
+      const anilistId =
         typeof message.anilistId === "number" &&
         Number.isFinite(message.anilistId)
           ? message.anilistId
@@ -625,20 +732,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      if (!anilistId) {
-        anilistId = (await fetchAnilistId(title)) || null;
-      }
-      if (!anilistId) {
+      const subtitleLookup = await resolveSubtitleLookup(title, anilistId);
+      if (!subtitleLookup || typeof subtitleLookup === "string") {
         sendResponse({ subs: [] });
         return;
       }
 
       const hasEpisode = typeof episode === "number";
       let subs = hasEpisode
-        ? await fetchSubtitleFiles(anilistId, episode)
-        : await fetchSubtitleFiles(anilistId);
+        ? await fetchSubtitleFiles(subtitleLookup, episode)
+        : await fetchSubtitleFiles(subtitleLookup);
       if (hasEpisode && (typeof subs === "string" || subs.length === 0)) {
-        subs = await fetchSubtitleFiles(anilistId);
+        subs = await fetchSubtitleFiles(subtitleLookup);
       }
       if (typeof subs === "string") {
         sendResponse({ subs: [], error: subs });
@@ -674,7 +779,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const result = await downloadSubs(
         context.tabId,
         context.title,
-        context.anilistId,
+        context.subtitleLookup,
         context.episode,
       );
       if (

@@ -21,12 +21,15 @@ export type Subs = {
 
 export type JimakuEntry = {
   id: number;
+  anilist_id?: number;
+  name?: string;
 };
 
 export type AnilistObject = {
-  data: {
+  data?: {
     Media: {
       id: number;
-    };
-  };
+    } | null;
+  } | null;
+  errors?: { message?: string; status?: number }[];
 };
